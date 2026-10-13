@@ -89,12 +89,13 @@ fun HomeScreen(
     val profile = remember { ProfileStore(context).load() }
     val (body, reason) = remember { EnergyRepo.body(profile) }
     val goals = remember { goalStore.load() }
-    var eaten by remember(dayOffset) { mutableStateOf(0.0) }
+    val dayTotals = remember(dayOffset) { loadDay(db, dayOffset).flatMap { it.items }.totals() }
+    val eaten = dayTotals.kcal
+    val budget by rememberBudget(db, goalStore, dayOffset)
     var day by remember(dayOffset) { mutableStateOf<DayEnergy?>(null) }
     val nf = remember { NumberFormat.getIntegerInstance() }
 
     LaunchedEffect(dayOffset) {
-        eaten = withContext(Dispatchers.IO) { loadDay(db, dayOffset).flatMap { it.items }.totals().kcal }
         if (body != null) {
             val act = EnergyRepo.activityFor(context, listOf(dayOffset))[dayOffset]
             val raw = EnergyRepo.build(body, dayOffset, eaten, act)
@@ -128,11 +129,12 @@ fun HomeScreen(
                 Column(Modifier.padding(20.dp)) {
                     Text("Energy balance", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     val d = day
-                    val goalText = if (goals.kcal > 0) "Goal ${goals.kcal.f0()} kcal" else null
+                    val goalKcal = budget?.kcalGoal ?: goals.kcal
+                    val goalText = if (goalKcal > 0) "Goal ${goalKcal.f0()} kcal" else null
                     when {
                         body == null -> {
                             Muted(reason ?: "", Modifier.padding(top = 6.dp))
-                            val scale = max(max(eaten, goals.kcal), 1.0)
+                            val scale = max(max(eaten, goalKcal), 1.0)
                             BarRow(
                                 "Intake", "${eaten.f0()} kcal", goalText,
                                 (eaten / scale).toFloat(), MaterialTheme.colorScheme.primary
@@ -172,6 +174,8 @@ fun HomeScreen(
                 }
             }
         }
+
+        item { BudgetCard(budget, dayTotals, dayOffset) { onOpenTab(NavTab.Profile) } }
 
         // ---- steps to even out
         item {

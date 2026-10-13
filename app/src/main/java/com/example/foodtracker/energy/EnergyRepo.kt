@@ -6,6 +6,7 @@ import com.example.foodtracker.data.Profile
 import com.example.foodtracker.health.DayActivity
 import com.example.foodtracker.health.HealthPrefs
 import com.example.foodtracker.health.HealthRepo
+import java.time.LocalDate
 import java.util.Calendar
 
 object EnergyRepo {
@@ -22,15 +23,29 @@ object EnergyRepo {
         return Body(profile.weightKg, profile.heightCm, age, profile.sex) to null
     }
 
+    private val activityCache = HashMap<String, Pair<Long, DayActivity>>()
+
     /** Health Connect data per day offset. Empty if not available, switched off, or not permitted. */
     suspend fun activityFor(context: Context, offsets: List<Int>): Map<Int, DayActivity> {
         if (HealthConnectClient.getSdkStatus(context) != HealthConnectClient.SDK_AVAILABLE) return emptyMap()
         if (!HealthPrefs(context).enabled) return emptyMap()
         val client = HealthConnectClient.getOrCreate(context)
         if (!runCatching { HealthRepo.hasPermissions(client) }.getOrDefault(false)) return emptyMap()
+
         val out = HashMap<Int, DayActivity>()
+        val now = System.currentTimeMillis()
         for (o in offsets) {
-            runCatching { HealthRepo.readDay(client, o) }.onSuccess { out[o] = it }
+            val key = LocalDate.now().plusDays(o.toLong()).toString()
+            val ttl = if (o < 0) 600_000L else 60_000L        // finished days: 10 min, today: 1 min
+            val hit = synchronized(activityCache) { activityCache[key] }
+            if (hit != null && now - hit.first < ttl) {
+                out[o] = hit.second
+            } else {
+                runCatching { HealthRepo.readDay(client, o) }.onSuccess {
+                    out[o] = it
+                    synchronized(activityCache) { activityCache[key] = now to it }
+                }
+            }
         }
         return out
     }

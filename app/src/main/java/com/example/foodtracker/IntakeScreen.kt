@@ -47,6 +47,10 @@ fun IntakeScreen(
     var loaded by remember(dayOffset) { mutableStateOf(false) }
     var reloads by remember { mutableStateOf(0) }   // bump to read the day again
     val goals = remember { goalStore.load() }
+    val budget by rememberBudget(db, goalStore, dayOffset)
+    val kcalGoal = budget?.kcalGoal?.takeIf { it > 0 } ?: goals.kcal
+    val sugarGoal = budget?.sugarGoal ?: goals.sugar
+    val fatGoal = budget?.fatGoal ?: goals.fat
     var toDelete by remember { mutableStateOf<Meal?>(null) }
     val totals = remember(meals) { meals.flatMap { it.items }.totals() }
     val timeFmt = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
@@ -96,7 +100,7 @@ fun IntakeScreen(
                     Modifier.fillMaxWidth().padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    CalorieRing(totals.kcal, goals.kcal)
+                    CalorieRing(totals.kcal, kcalGoal)
                     Spacer(Modifier.height(16.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         StatTile("Sugar", "${totals.sugar.f1()} g", Modifier.weight(1f))
@@ -104,8 +108,8 @@ fun IntakeScreen(
                         StatTile("Carbs", "${totals.carbs.f1()} g", Modifier.weight(1f))
                         StatTile("Protein", "${totals.protein.f1()} g", Modifier.weight(1f))
                     }
-                    if (goals.sugar > 0) LabeledBar("Sugar", totals.sugar, goals.sugar, "g", 1)
-                    if (goals.fat > 0) LabeledBar("Fat", totals.fat, goals.fat, "g", 1)
+                    if (sugarGoal > 0) LabeledBar("Sugar", totals.sugar, sugarGoal, "g", 1)
+                    if (fatGoal > 0) LabeledBar("Fat", totals.fat, fatGoal, "g", 1)
                     Spacer(Modifier.height(12.dp))
                     Text(
                         "Fiber ${totals.fiber.f1()} g  ·  Sat. fat ${totals.satFat.f1()} g  ·  Sodium ${totals.sodium.f0()} mg",

@@ -1,6 +1,7 @@
 package com.example.foodtracker.nutrition
 
 import com.example.foodtracker.ai.FoodAnalyzer
+import com.example.foodtracker.ai.RecipeFetcher
 import com.example.foodtracker.data.AI_ESTIMATE
 import com.example.foodtracker.data.FoodItem
 import com.example.foodtracker.data.PortionEstimate
@@ -25,10 +26,14 @@ object MealPipeline {
         }
     }
 
-    /** A typed or spoken description. Amounts come from the user, so no learned scaling. */
+    /**
+     * A typed, spoken or shared description, a recipe, or a link to a recipe page.
+     * Amounts come from the user, so no learned scaling.
+     */
     suspend fun runText(description: String): Result<Analysis> = withContext(Dispatchers.IO) {
         runCatching {
-            build(FoodAnalyzer.analyzeText(description).getOrThrow(), "No food found in that description", learned = false)
+            val content = RecipeFetcher.expand(description)
+            build(FoodAnalyzer.analyzeText(content).getOrThrow(), "No food found in that description", learned = false)
         }
     }
 

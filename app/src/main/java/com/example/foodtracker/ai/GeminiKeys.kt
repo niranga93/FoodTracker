@@ -3,6 +3,9 @@ package com.example.foodtracker.ai
 import android.content.Context
 import com.example.foodtracker.BuildConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -25,8 +28,21 @@ object GeminiKeys {
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
 
+    // Set to false to see the locked screens in a debug build, as they appear in a release build
+    private const val USE_DEV_KEYS_IN_DEBUG = true
+
+    private val _available = MutableStateFlow(false)
+
+    /** True when at least one usable key exists. The UI watches this. */
+    val available: StateFlow<Boolean> = _available.asStateFlow()
+
+    private fun refresh() {
+        _available.value = list().isNotEmpty()
+    }
+
     fun init(context: Context) {
         appContext = context.applicationContext
+        refresh()
     }
 
     private fun prefs() = appContext?.getSharedPreferences("gemini_user_keys", Context.MODE_PRIVATE)
@@ -47,12 +63,14 @@ object GeminiKeys {
         if (i < 0) return false
         p.edit().putString("k$i", Crypto.encrypt(key)).apply()
         version++
+        refresh()
         return true
     }
 
     fun remove(index: Int) {
         prefs()?.edit()?.remove("k$index")?.apply()
         version++
+        refresh()
     }
 
     private fun builtIn(): List<String> = listOf(
@@ -60,7 +78,8 @@ object GeminiKeys {
     ).filter { it.isNotBlank() }
 
     /** The user's own keys first. Keys from local.properties are used in debug builds only. */
-    fun list(): List<String> = slots().filterNotNull() + if (BuildConfig.DEBUG) builtIn() else emptyList()
+    fun list(): List<String> =
+        slots().filterNotNull() + if (BuildConfig.DEBUG && USE_DEV_KEYS_IN_DEBUG) builtIn() else emptyList()
 
     fun hasAny(): Boolean = list().isNotEmpty()
 

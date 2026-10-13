@@ -94,16 +94,20 @@ fun shiftDays(timestamp: Long, days: Int): Long {
 fun AppLogo(logoSize: Dp = 96.dp, modifier: Modifier = Modifier) {
     Canvas(modifier.size(logoSize)) {
         val w = this.size.minDimension
+        val k = w / 100f
+        fun p(n: Float) = n * k
         drawCircle(brush = Brush.linearGradient(listOf(Color(0xFF66BB6A), Color(0xFF1B5E20))))
         drawCircle(color = Color.White, radius = w * 0.30f, style = Stroke(width = w * 0.055f))
         drawCircle(color = Color(0xFFFFA726), radius = w * 0.14f)
         val leaf = Path().apply {
-            moveTo(w * 0.52f, w * 0.36f)
-            quadraticBezierTo(w * 0.60f, w * 0.10f, w * 0.86f, w * 0.14f)
-            quadraticBezierTo(w * 0.82f, w * 0.38f, w * 0.52f, w * 0.36f)
+            moveTo(p(54f), p(40f))
+            cubicTo(p(63f), p(45f), p(66f), p(54f), p(60f), p(62f))
+            cubicTo(p(56f), p(67f), p(49f), p(67f), p(46f), p(62f))
+            cubicTo(p(42f), p(56f), p(45f), p(46f), p(54f), p(40f))
             close()
         }
-        drawPath(leaf, color = Color(0xFFC8E6C9))
+        drawPath(leaf, Color.White)
+        drawLine(Color(0xFF0E1A13), Offset(p(49f), p(63f)), Offset(p(57f), p(50f)), strokeWidth = 2f * k, cap = StrokeCap.Round)
     }
 }
 

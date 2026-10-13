@@ -95,7 +95,11 @@ fun ProfileHub(onOpenPage: (String) -> Unit, inner: PaddingValues) {
             }
         }
         AppCard(Modifier.fillMaxWidth()) {
-            NavRow("Settings", "Turn features on or off") { onOpenPage("settings") }
+            Column {
+                NavRow("Settings", "Turn features on or off") { onOpenPage("settings") }
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                NavRow("About", "Version ${remember { appVersion(context).name }}") { onOpenPage("about") }
+            }
         }
     }
 }
@@ -111,6 +115,7 @@ fun PageScreen(id: String, db: MealDb, goalStore: GoalStore, onBack: () -> Unit)
         "weight" -> "Weigh-ins"
         "connections" -> "Connections"
         "data" -> "Data & privacy"
+        "about" -> "About"
         else -> "Settings"
     }
     Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
@@ -124,11 +129,16 @@ fun PageScreen(id: String, db: MealDb, goalStore: GoalStore, onBack: () -> Unit)
                 "goals" -> { GoalsCard(goalStore); TargetCard() }
                 "diet" -> DietCard()
                 "weight" -> WeightCard()
-                "connections" -> { GeminiKeyCard(); HealthConnectorCard(); BackupCard(db, goalStore) }
+                "connections" -> {
+                    GeminiKeyCard(); HealthConnectorCard(); HealthExtrasCard()
+                    BackupCard(db, goalStore)
+                    BackupFileCard(db, goalStore)
+                }
                 "data" -> {
                     DataCard(db)
-                    PrivacyCard()      // delete this line if you haven't added Privacy.kt
+                    PrivacyCard()
                 }
+                "about" -> AboutContent()
                 else -> SettingsContent()
             }
         }

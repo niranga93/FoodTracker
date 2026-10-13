@@ -6,6 +6,7 @@ import com.example.foodtracker.data.FoodItem
 import com.example.foodtracker.nutrition.Analysis
 import com.example.foodtracker.nutrition.MealPipeline
 import com.example.foodtracker.nutrition.NutritionLookup
+import com.example.foodtracker.nutrition.OffProduct
 import com.example.foodtracker.nutrition.OpenFoodFacts
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -117,7 +118,8 @@ class ReviewViewModel(
 data class ScannedUiState(
     val isLoading: Boolean = true,
     val error: String? = null,
-    val item: FoodItem? = null
+    val item: FoodItem? = null,
+    val product: OffProduct? = null
 )
 
 class ScannedViewModel(private val code: String) : ViewModel() {
@@ -129,13 +131,13 @@ class ScannedViewModel(private val code: String) : ViewModel() {
     fun load() {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
-            runCatching { withContext(Dispatchers.IO) { OpenFoodFacts.fetch(code) } }.fold(
+            runCatching { withContext(Dispatchers.IO) { OpenFoodFacts.fetchProduct(code) } }.fold(
                 onSuccess = { p ->
                     _state.update {
                         if (p == null) it.copy(
                             isLoading = false,
                             error = "Product $code was not found in Open Food Facts."
-                        ) else it.copy(isLoading = false, item = p)
+                        ) else it.copy(isLoading = false, item = p.item, product = p)
                     }
                 },
                 onFailure = { err ->

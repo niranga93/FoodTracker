@@ -57,6 +57,9 @@ they give ("2 eggs", "a large bowl", "half a cup"); when no amount is given, ass
 single adult portion. Include likely hidden ingredients (cooking oil, butter, sauces) as
 separate items only when the description implies them, e.g. "fried" or "buttered".
 Use their wording for meal_description, tidied up.
+If the text is a recipe (an ingredient list, possibly with a yield), estimate ONE serving:
+divide every amount by the stated number of servings (assume 2 if none is stated) and add the
+serving count to meal_description, e.g. "Chicken curry (1 of 4 servings)".
 """
 
     private const val RULES = """

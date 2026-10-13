@@ -10,6 +10,8 @@ import android.util.Size
 import android.widget.Toast
 import android.content.Intent
 import android.os.Build
+import android.net.Uri
+import androidx.lifecycle.lifecycleScope
 import androidx.activity.viewModels
 import com.example.foodtracker.pending.AnalyzePendingWorker
 import com.example.foodtracker.pending.PendingMeal
@@ -113,6 +115,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.foodtracker.backup.BackupService
+import com.example.foodtracker.health.HealthSync
 import androidx.compose.material.icons.filled.Person
 
 class MainActivity : ComponentActivity() {
@@ -126,7 +129,10 @@ class MainActivity : ComponentActivity() {
         PortionStore.init(applicationContext)
         BackupService.init(applicationContext)
         com.example.foodtracker.ai.GeminiKeys.init(applicationContext)
-        if (savedInstanceState == null) openPendingFrom(intent)
+        if (savedInstanceState == null) {
+            openPendingFrom(intent)
+            handleShare(intent)
+        }
         // Photos queued offline get another chance whenever the app starts
         if (PendingMeals.all(this).any { it.status == PendingStatus.WAITING }) AnalyzePendingWorker.enqueue(this)
 
@@ -157,11 +163,52 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         openPendingFrom(intent)
+        handleShare(intent)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        HealthSync.runAsync(this)           // imports new weights from Health Connect
     }
 
     override fun onStop() {
         super.onStop()
         BackupService.autoBackup(this)      // saves anything changed while the app was open
+        HealthSync.runAsync(this)           // sends meals, water and weight to Health Connect
+    }
+
+    /** A photo, a recipe link or meal text shared from another app opens the review. */
+    private fun handleShare(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND) return
+        val type = intent.type ?: return
+        if (!com.example.foodtracker.ai.GeminiKeys.hasAny()) {
+            Toast.makeText(this, "Photo and text sharing needs your free Gemini key", Toast.LENGTH_LONG).show()
+            nav.open(Screen.Page("connections"))
+            return
+        }
+        when {
+            type.startsWith("image/") -> {
+                val uri = if (Build.VERSION.SDK_INT >= 33) {
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+                } ?: return
+                lifecycleScope.launch {
+                    val file = withContext(Dispatchers.IO) { ImageUtil.copyToCache(applicationContext, uri) }
+                    if (file == null) {
+                        Toast.makeText(this@MainActivity, "Could not open that photo", Toast.LENGTH_SHORT).show()
+                    } else {
+                        ImageUtil.photoDayOffset(file)?.let { nav.setDay(it) }   // preselect the day it was taken
+                        nav.open(Screen.Review(file))
+                    }
+                }
+            }
+            type == "text/plain" -> {
+                val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
+                if (text.isNotBlank()) nav.open(Screen.ReviewText(text.take(8000)))
+            }
+        }
     }
 
     /** Opens the review for a queued photo when started from its "ready to review" notification. */
@@ -286,109 +333,112 @@ fun FoodApp(nav: NavViewModel = viewModel()) {
         nav.back()
     }
 
-    when (val s = state.screen) {
-        is Screen.Main -> MainScaffold(
-            tab = state.tab,
-            onTab = nav::selectTab,
-            db = db,
-            goalStore = goalStore,
-            dayOffset = state.dayOffset,
-            onDayChange = nav::setDay,
-            onPhoto = { if (!needKey()) go(Screen.Camera) },
-            onScan = { go(Screen.Barcode) },
-            onManual = { nav.open(Screen.Manual) },
-            onDescribe = { nav.open(Screen.Describe()) },
-            onEditMeal = { nav.open(Screen.EditMeal(it)) },
-            onOpenHistory = { nav.open(Screen.History) },
-            onOpenPage = { nav.open(Screen.Page(it)) }
-        )
-        is Screen.History -> HistoryPage(
-            db = db,
-            goalStore = goalStore,
-            onBack = nav::back,
-            onOpenDay = nav::openDay
-        )
-        is Screen.Camera -> CameraScreen(
-            onBack = nav::back,
-            onGallery = ::pickFromGallery
-        ) { nav.open(Screen.Review(it)) }
-        is Screen.Review -> ReviewScreen(
-            file = s.file,
-            text = null,
-            db = db,
-            initialOffset = state.dayOffset,
-            onBack = nav::back,
-            onRetake = { nav.open(Screen.Camera) },
-            onDone = nav::finishSave
-        )
-        is Screen.Describe -> DescribeMealScreen(
-            initial = s.initial,
-            onBack = nav::back,
-            onSubmit = { nav.open(Screen.ReviewText(it)) }
-        )
-        is Screen.ReviewText -> ReviewScreen(
-            file = null,
-            text = s.text,
-            db = db,
-            initialOffset = state.dayOffset,
-            onBack = nav::back,
-            onRetake = { nav.open(Screen.Describe(s.text)) },
-            onDone = nav::finishSave
-        )
-        is Screen.ReviewPending -> {
-            val p = remember(s.id) { PendingMeals.get(context, s.id) }
-            if (p == null) {
-                // Already saved or discarded (e.g. an old notification)
-                LaunchedEffect(s.id) { nav.back() }
-            } else {
-                ReviewScreen(
-                    file = p.photo,
-                    text = null,
-                    db = db,
-                    initialOffset = dayOffsetOf(p.mealTs),
-                    onBack = nav::back,
-                    onRetake = {},
-                    onDone = nav::finishSave,
-                    pending = p
-                )
+    // Lets any widget open a Profile page, e.g. the key page from a locked AI card
+    CompositionLocalProvider(LocalOpenPage provides { nav.open(Screen.Page(it)) }) {
+        when (val s = state.screen) {
+            is Screen.Main -> MainScaffold(
+                tab = state.tab,
+                onTab = nav::selectTab,
+                db = db,
+                goalStore = goalStore,
+                dayOffset = state.dayOffset,
+                onDayChange = nav::setDay,
+                onPhoto = { if (!needKey()) go(Screen.Camera) },
+                onScan = { go(Screen.Barcode) },
+                onManual = { nav.open(Screen.Manual) },
+                onDescribe = { nav.open(Screen.Describe()) },
+                onEditMeal = { nav.open(Screen.EditMeal(it)) },
+                onOpenHistory = { nav.open(Screen.History) },
+                onOpenPage = { nav.open(Screen.Page(it)) }
+            )
+            is Screen.History -> HistoryPage(
+                db = db,
+                goalStore = goalStore,
+                onBack = nav::back,
+                onOpenDay = nav::openDay
+            )
+            is Screen.Camera -> CameraScreen(
+                onBack = nav::back,
+                onGallery = ::pickFromGallery
+            ) { nav.open(Screen.Review(it)) }
+            is Screen.Review -> ReviewScreen(
+                file = s.file,
+                text = null,
+                db = db,
+                initialOffset = state.dayOffset,
+                onBack = nav::back,
+                onRetake = { nav.open(Screen.Camera) },
+                onDone = nav::finishSave
+            )
+            is Screen.Describe -> DescribeMealScreen(
+                initial = s.initial,
+                onBack = nav::back,
+                onSubmit = { nav.open(Screen.ReviewText(it)) }
+            )
+            is Screen.ReviewText -> ReviewScreen(
+                file = null,
+                text = s.text,
+                db = db,
+                initialOffset = state.dayOffset,
+                onBack = nav::back,
+                onRetake = { nav.open(Screen.Describe(s.text)) },
+                onDone = nav::finishSave
+            )
+            is Screen.ReviewPending -> {
+                val p = remember(s.id) { PendingMeals.get(context, s.id) }
+                if (p == null) {
+                    // Already saved or discarded (e.g. an old notification)
+                    LaunchedEffect(s.id) { nav.back() }
+                } else {
+                    ReviewScreen(
+                        file = p.photo,
+                        text = null,
+                        db = db,
+                        initialOffset = dayOffsetOf(p.mealTs),
+                        onBack = nav::back,
+                        onRetake = {},
+                        onDone = nav::finishSave,
+                        pending = p
+                    )
+                }
             }
+            is Screen.Barcode -> BarcodeScreen(
+                onBack = nav::back
+            ) { nav.open(Screen.Scanned(it)) }
+            is Screen.Scanned -> ScannedScreen(
+                code = s.code,
+                db = db,
+                initialOffset = state.dayOffset,
+                onBack = nav::back,
+                onRescan = { nav.open(Screen.Barcode) },
+                onDone = nav::finishSave
+            )
+            is Screen.Manual -> ManualEntryScreen(
+                db = db,
+                initialOffset = state.dayOffset,
+                onBack = nav::back,
+                onFavorites = { nav.open(Screen.Favorites) },
+                onDone = nav::finishSave
+            )
+            is Screen.EditMeal -> EditMealScreen(
+                mealId = s.id,
+                db = db,
+                onBack = nav::back,
+                onDone = nav::finishSave
+            )
+            is Screen.Favorites -> FavoriteMealsScreen(
+                db = db,
+                initialOffset = state.dayOffset,
+                onBack = { nav.open(Screen.Manual) },   // opened from Add manually
+                onDone = nav::finishSave
+            )
+            is Screen.Page -> PageScreen(
+                id = s.id,
+                db = db,
+                goalStore = goalStore,
+                onBack = nav::back
+            )
         }
-        is Screen.Barcode -> BarcodeScreen(
-            onBack = nav::back
-        ) { nav.open(Screen.Scanned(it)) }
-        is Screen.Scanned -> ScannedScreen(
-            code = s.code,
-            db = db,
-            initialOffset = state.dayOffset,
-            onBack = nav::back,
-            onRescan = { nav.open(Screen.Barcode) },
-            onDone = nav::finishSave
-        )
-        is Screen.Manual -> ManualEntryScreen(
-            db = db,
-            initialOffset = state.dayOffset,
-            onBack = nav::back,
-            onFavorites = { nav.open(Screen.Favorites) },
-            onDone = nav::finishSave
-        )
-        is Screen.EditMeal -> EditMealScreen(
-            mealId = s.id,
-            db = db,
-            onBack = nav::back,
-            onDone = nav::finishSave
-        )
-        is Screen.Favorites -> FavoriteMealsScreen(
-            db = db,
-            initialOffset = state.dayOffset,
-            onBack = { nav.open(Screen.Manual) },   // opened from Add manually
-            onDone = nav::finishSave
-        )
-        is Screen.Page -> PageScreen(
-            id = s.id,
-            db = db,
-            goalStore = goalStore,
-            onBack = nav::back
-        )
     }
 }
 
@@ -410,6 +460,7 @@ fun MainScaffold(
     onOpenHistory: () -> Unit,
     onOpenPage: (String) -> Unit
 ) {
+    val aiOn = rememberAiAvailable()
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
@@ -430,24 +481,30 @@ fun MainScaffold(
             }
         },
         floatingActionButton = {
-            if (tab == NavTab.Home || tab == NavTab.Intake) AddFab(onPhoto, onDescribe, onScan, onManual)
+            if (tab == NavTab.Home || tab == NavTab.Intake) {
+                AddFab(aiOn, onPhoto, onDescribe, onScan, onManual) { onOpenPage("connections") }
+            }
         }
     ) { inner ->
-        when (tab) {
-            NavTab.Home -> HomeScreen(db, goalStore, dayOffset, onDayChange, onTab, { onOpenPage("settings") }, inner)
-            NavTab.Intake -> IntakeScreen(db, goalStore, dayOffset, onDayChange, onEditMeal, onOpenHistory, inner)
-            NavTab.Burned -> BurnedScreen(db, dayOffset, onDayChange, inner)
-            NavTab.Profile -> ProfileHub(onOpenPage, inner)
+        RefreshBox(topInset = inner.calculateTopPadding()) {
+            when (tab) {
+                NavTab.Home -> HomeScreen(db, goalStore, dayOffset, onDayChange, onTab, { onOpenPage("settings") }, inner)
+                NavTab.Intake -> IntakeScreen(db, goalStore, dayOffset, onDayChange, onEditMeal, onOpenHistory, inner)
+                NavTab.Burned -> BurnedScreen(db, dayOffset, onDayChange, inner)
+                NavTab.Profile -> ProfileHub(onOpenPage, inner)
+            }
         }
     }
 }
 
 @Composable
 fun AddFab(
+    aiEnabled: Boolean,
     onPhoto: () -> Unit,
     onDescribe: () -> Unit,
     onScan: () -> Unit,
-    onManual: () -> Unit
+    onManual: () -> Unit,
+    onSetupKey: () -> Unit
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
@@ -459,12 +516,16 @@ fun AddFab(
             contentColor = MaterialTheme.colorScheme.onPrimary
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            // Photo and Describe use Gemini, so they are locked until a key is added
+            val lockedHint = "Needs a Gemini key"
             DropdownMenuItem(
-                text = { MenuLabel("Photo", "Camera, or pick from gallery") },
+                enabled = aiEnabled,
+                text = { MenuLabel("Photo", if (aiEnabled) "Camera, or pick from gallery" else lockedHint) },
                 onClick = { open = false; onPhoto() }
             )
             DropdownMenuItem(
-                text = { MenuLabel("Describe or speak", "Type or say what you ate") },
+                enabled = aiEnabled,
+                text = { MenuLabel("Describe or speak", if (aiEnabled) "Type or say what you ate" else lockedHint) },
                 onClick = { open = false; onDescribe() }
             )
             DropdownMenuItem(
@@ -475,6 +536,13 @@ fun AddFab(
                 text = { MenuLabel("Add manually", "Search, recent, quick add, favorite meals") },
                 onClick = { open = false; onManual() }
             )
+            if (!aiEnabled) {
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text("Get a free key to unlock photos", color = MaterialTheme.colorScheme.primary) },
+                    onClick = { open = false; onSetupKey() }
+                )
+            }
         }
     }
 }
@@ -1039,6 +1107,7 @@ fun ScannedScreen(
                         onGrams = { g -> vm.setGrams(g) },
                         onRemove = onRescan
                     )
+                    state.product?.let { ProductDetails(it) }
                     Text(
                         "Set the amount you ate.",
                         style = MaterialTheme.typography.bodySmall,

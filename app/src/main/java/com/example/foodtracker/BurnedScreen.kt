@@ -85,6 +85,7 @@ fun BurnedScreen(db: MealDb, dayOffset: Int, onDayChange: (Int) -> Unit, inner: 
     val (body, reason) = remember { EnergyRepo.body(profile) }
     var week by remember(dayOffset) { mutableStateOf<List<DayEnergy>>(emptyList()) }   // newest first
     var hasDeviceData by remember(dayOffset) { mutableStateOf(false) }
+    val bodyDays by rememberBodyData(dayOffset)
 
     LaunchedEffect(dayOffset) {
         if (body != null) {
@@ -132,6 +133,13 @@ fun BurnedScreen(db: MealDb, dayOffset: Int, onDayChange: (Int) -> Unit, inner: 
             }
             if (features.isOn("burn_steps")) item { StepsChartCard(week) }
             if (features.isOn("burn_outlook")) item { OutlookCard(db) }
+            bodyDays?.let { d ->
+                if (features.isOn("burn_sleep") && d.any { it.sleepMinutes != null }) item { SleepCard(d, dayOffset) }
+                if (features.isOn("burn_heart") && d.any { it.hrAvg != null }) item { HeartRateCard(d) }
+                if (features.isOn("burn_workouts") && d.first().workouts.isNotEmpty()) {
+                    item { WorkoutsCard(d.first(), dayOffset) }
+                }
+            }
             item {
                 Expandable("Source data") {
                     ActivityCard(dayOffset)

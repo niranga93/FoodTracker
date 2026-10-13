@@ -107,6 +107,17 @@ private fun DayRow(off: Int, t: Totals, maxKcal: Double, goal: Double, onClick: 
 
 @Composable
 fun HistoryPage(db: MealDb, goalStore: GoalStore, onBack: () -> Unit, onOpenDay: (Int) -> Unit) {
+    Column(Modifier.fillMaxSize().systemBarsPadding()) {
+        ScreenTopBar("History", onBack)
+        Box(Modifier.weight(1f)) {
+            RefreshBox { HistoryList(db, goalStore, onOpenDay) }
+        }
+    }
+}
+
+// Loads its own data, so pull-to-refresh reloads the 14 days
+@Composable
+private fun HistoryList(db: MealDb, goalStore: GoalStore, onOpenDay: (Int) -> Unit) {
     val context = LocalContext.current
     val goals = remember { goalStore.load() }
     val budget by rememberBudget(db, goalStore, 0)
@@ -119,59 +130,56 @@ fun HistoryPage(db: MealDb, goalStore: GoalStore, onBack: () -> Unit, onOpenDay:
     val nf = remember { NumberFormat.getIntegerInstance() }
     val timeline = days.reversed()      // oldest on the left
 
-    Column(Modifier.fillMaxSize().systemBarsPadding()) {
-        ScreenTopBar("History", onBack)
-        LazyColumn(
-            Modifier.weight(1f),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-                WidgetCard(
-                    "Calories, last 14 days",
-                    trailing = {
-                        TextButton(onClick = {
-                            val week = days.take(7).filter { it.second.kcal > 0 }
-                            val text = if (week.isEmpty()) "FoodTracker: no meals logged in the last 7 days."
-                            else "FoodTracker, last 7 days\n" +
-                                "Days logged: ${week.size} of 7\n" +
-                                "Average: ${nf.format(week.map { it.second.kcal }.average().toLong())} kcal a day\n" +
-                                "Sugar ${week.map { it.second.sugar }.average().f1()} g, " +
-                                "fat ${week.map { it.second.fat }.average().f1()} g a day"
-                            val send = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, text)
-                            }
-                            context.startActivity(Intent.createChooser(send, "Share"))
-                        }) { Text("Share") }
-                    }
-                ) {
-                    Row(Modifier.fillMaxWidth()) {
-                        Metric("Days logged", "${logged.size}/14", Modifier.weight(1f))
-                        Metric("Daily average", nf.format(avg.toLong()), Modifier.weight(1f))
-                        if (goal > 0) Metric("Within goal", "$within", Modifier.weight(1f))
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    CalorieHistoryChart(timeline.map { it.second.kcal }, timeline.map { it.first }, goal)
-                    if (goal > 0) {
-                        Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            LegendDot(MaterialTheme.colorScheme.primary, "Within goal")
-                            LegendDot(MaterialTheme.colorScheme.error, "Over goal")
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            WidgetCard(
+                "Calories, last 14 days",
+                trailing = {
+                    TextButton(onClick = {
+                        val week = days.take(7).filter { it.second.kcal > 0 }
+                        val text = if (week.isEmpty()) "FoodTracker: no meals logged in the last 7 days."
+                        else "FoodTracker, last 7 days\n" +
+                            "Days logged: ${week.size} of 7\n" +
+                            "Average: ${nf.format(week.map { it.second.kcal }.average().toLong())} kcal a day\n" +
+                            "Sugar ${week.map { it.second.sugar }.average().f1()} g, " +
+                            "fat ${week.map { it.second.fat }.average().f1()} g a day"
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, text)
                         }
+                        context.startActivity(Intent.createChooser(send, "Share"))
+                    }) { Text("Share") }
+                }
+            ) {
+                Row(Modifier.fillMaxWidth()) {
+                    Metric("Days logged", "${logged.size}/14", Modifier.weight(1f))
+                    Metric("Daily average", nf.format(avg.toLong()), Modifier.weight(1f))
+                    if (goal > 0) Metric("Within goal", "$within", Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(12.dp))
+                CalorieHistoryChart(timeline.map { it.second.kcal }, timeline.map { it.first }, goal)
+                if (goal > 0) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        LegendDot(MaterialTheme.colorScheme.primary, "Within goal")
+                        LegendDot(MaterialTheme.colorScheme.error, "Over goal")
                     }
                 }
             }
-            item {
-                Text("Day by day", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
-            item {
-                AppCard(Modifier.fillMaxWidth()) {
-                    Column {
-                        days.forEachIndexed { i, (off, t) ->
-                            DayRow(off, t, maxKcal, goal) { onOpenDay(off) }
-                            if (i < days.lastIndex) HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                        }
+        }
+        item {
+            Text("Day by day", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
+        item {
+            AppCard(Modifier.fillMaxWidth()) {
+                Column {
+                    days.forEachIndexed { i, (off, t) ->
+                        DayRow(off, t, maxKcal, goal) { onOpenDay(off) }
+                        if (i < days.lastIndex) HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                     }
                 }
             }

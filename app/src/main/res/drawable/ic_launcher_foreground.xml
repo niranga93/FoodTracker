@@ -18,6 +18,10 @@
 
     <!-- Leaf Accent -->
     <path
-        android:fillColor="#C8E6C9"
-        android:pathData="M 56.16,38.88 C 64.8,10.8 92.88,15.12 88.56,41.04 C 88.56,41.04 56.16,38.88 56.16,38.88 Z" />
+        android:pathData="M54,40 C63,45 66,54 60,62 C56,67 49,67 46,62 C42,56 45,46 54,40 Z"
+        android:fillColor="#FFFFFF"/>
+    <path
+        android:pathData="M49,63 L57,50"
+        android:strokeColor="#0E1A13" android:strokeWidth="2"
+        android:strokeLineCap="round" android:fillColor="#00000000"/>
 </vector>

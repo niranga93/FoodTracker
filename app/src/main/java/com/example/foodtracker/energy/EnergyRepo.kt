@@ -25,6 +25,11 @@ object EnergyRepo {
 
     private val activityCache = HashMap<String, Pair<Long, DayActivity>>()
 
+    /** Forgets saved Health Connect readings, so the next read fetches fresh ones. */
+    fun clearCache() {
+        synchronized(activityCache) { activityCache.clear() }
+    }
+
     /** Health Connect data per day offset. Empty if not available, switched off, or not permitted. */
     suspend fun activityFor(context: Context, offsets: List<Int>): Map<Int, DayActivity> {
         if (HealthConnectClient.getSdkStatus(context) != HealthConnectClient.SDK_AVAILABLE) return emptyMap()

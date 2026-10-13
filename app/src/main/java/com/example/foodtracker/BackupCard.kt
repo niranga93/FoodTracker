@@ -1,5 +1,9 @@
 package com.example.foodtracker
 
+import android.accounts.AccountManager
+import android.app.Activity
+import android.util.Log
+import com.google.android.gms.common.api.ApiException
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -65,7 +69,13 @@ fun BackupCard(db: MealDb, goalStore: GoalStore) {
             when (action) {
                 "signin" -> {
                     val mail = withContext(Dispatchers.IO) { DriveApi.userEmail(token) }
+                    val previous = prefs.email
                     prefs.email = mail ?: "Google account"
+                    if (previous != prefs.email) {
+                        // A new account must be reviewed before auto-backup writes to it
+                        prefs.baselineSet = false
+                        prefs.lastHash = 0
+                    }
                     email = prefs.email
                     val remote = withContext(Dispatchers.IO) { BackupService.fetchRemote(token) }
                     if (remote == null) {
@@ -111,24 +121,36 @@ fun BackupCard(db: MealDb, goalStore: GoalStore) {
     val authLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
     ) { res ->
-        val token = runCatching {
-            Identity.getAuthorizationClient(context)
-                .getAuthorizationResultFromIntent(res.data).accessToken
-        }.getOrNull()
+        val result = runCatching {
+            Identity.getAuthorizationClient(context).getAuthorizationResultFromIntent(res.data)
+        }
+        val token = result.getOrNull()?.accessToken
         if (token == null) {
+            // Google's screen closing without a token is often a real error, not the user backing out
+            val e = result.exceptionOrNull()
+            Log.e("DriveAuth", "authorization failed, resultCode=${res.resultCode}", e)
             busy = false
-            message = "Google authorization was cancelled."
+            message = when {
+                // 10, or 8 with UNREGISTERED_ON_API_CONSOLE: no OAuth client for this package + SHA-1
+                e is ApiException && (e.statusCode == 10 || e.message.orEmpty().contains("UNREGISTERED_ON_API_CONSOLE")) ->
+                    "Google sign-in isn't set up for this build. The signing key (SHA-1) or package name doesn't match."
+                e is ApiException && (e.statusCode == 16 || e.statusCode == 12501) ||
+                    res.resultCode == Activity.RESULT_CANCELED ->
+                    "Sign-in closed. If Google showed 'Access blocked', add your Gmail as a test user."
+                else -> "Google didn't return access (${e?.message ?: "no token"})."
+            }
         } else {
             scope.launch { runAction(pendingAction, token) }
         }
     }
 
-    fun startAuth(action: String) {
+    // account defaults to the saved one, so every later backup uses the account the user chose
+    fun startAuth(action: String, account: String? = prefs.email) {
         pendingAction = action
         busy = true
         message = null
         scope.launch {
-            when (val r = DriveAuth.authorize(context)) {
+            when (val r = DriveAuth.authorize(context, account)) {
                 is AuthResult.Token -> runAction(action, r.value)
                 is AuthResult.NeedsConsent ->
                     authLauncher.launch(IntentSenderRequest.Builder(r.sender).build())
@@ -138,6 +160,21 @@ fun BackupCard(db: MealDb, goalStore: GoalStore) {
                 }
             }
         }
+    }
+
+    // Android's Google account picker, with Add account
+    val accountPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { res ->
+        val name = res.data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)
+        if (res.resultCode == Activity.RESULT_OK && name != null) startAuth("signin", name)
+        else message = "No account chosen."
+    }
+
+    fun chooseAccount() {
+        accountPicker.launch(
+            AccountManager.newChooseAccountIntent(null, null, arrayOf("com.google"), null, null, null, null)
+        )
     }
 
     // Shown when a Drive copy exists and the user must choose which side wins
@@ -214,7 +251,7 @@ fun BackupCard(db: MealDb, goalStore: GoalStore) {
             "Stores" to "Meals, weigh-ins, profile, settings"
         ),
         disconnectNote = "Auto-backup will stop on this phone. Your copy in Google Drive stays.",
-        onConnect = { startAuth("signin") },
+        onConnect = { chooseAccount() },
         onDisconnect = {
             prefs.clear()
             email = null
@@ -227,6 +264,7 @@ fun BackupCard(db: MealDb, goalStore: GoalStore) {
                 Button(enabled = !busy, onClick = { startAuth("backup") }) { Text("Back up now") }
                 OutlinedButton(enabled = !busy, onClick = { startAuth("restore") }) { Text("Restore") }
             }
+            TextButton(enabled = !busy, onClick = { chooseAccount() }) { Text("Switch account") }
         }
         if (busy) {
             Text(

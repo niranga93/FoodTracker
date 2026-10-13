@@ -90,6 +90,7 @@ fun ManualEntryScreen(
     var recents by remember { mutableStateOf<List<FoodItem>>(emptyList()) }
     var recentPick by remember { mutableStateOf<FoodItem?>(null) }
     var recentGrams by rememberSaveable { mutableStateOf("100") }
+    var packagedItem by remember { mutableStateOf<FoodItem?>(null) }
     LaunchedEffect(Unit) { recents = withContext(Dispatchers.IO) { db.recentItems(200) } }
     val shown = remember(recents, favKeys) {
         recents.sortedByDescending { FavoritesStore.key(it) in favKeys }   // favorites first, then newest
@@ -146,6 +147,7 @@ fun ManualEntryScreen(
                 sodium100 = p.sodiumMg
             ) else null
         }
+        3 -> packagedItem
         else -> {
             val f = recentPick
             if (f == null) null else {
@@ -163,6 +165,7 @@ fun ManualEntryScreen(
         ) {
             FilterChip(selected = mode == 0, onClick = { mode = 0 }, label = { Text("Quick add") })
             FilterChip(selected = mode == 1, onClick = { mode = 1 }, label = { Text("Search food") })
+            FilterChip(selected = mode == 3, onClick = { mode = 3 }, label = { Text("Packaged") })
             FilterChip(selected = mode == 2, onClick = { mode = 2 }, label = { Text("Recent") })
             // Saved whole meals have their own screen
             AssistChip(onClick = onFavorites, label = { Text("Favorite meals") })
@@ -296,6 +299,7 @@ fun ManualEntryScreen(
                 }
             }
 
+            3 -> PackagedPane(Modifier.weight(1f).padding(16.dp)) { packagedItem = it }
             else -> Column(Modifier.weight(1f).padding(16.dp)) {
                 val rp = recentPick
                 when {

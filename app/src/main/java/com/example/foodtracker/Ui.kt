@@ -20,8 +20,18 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import com.example.foodtracker.ai.GeminiKeys
 import com.example.foodtracker.energy.DayEnergy
+import com.example.foodtracker.energy.EnergyRepo
+import com.example.foodtracker.health.HealthSync
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -217,5 +227,62 @@ fun NavRow(title: String, subtitle: String, onClick: () -> Unit) {
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+/** Pull down to refresh. Rebuilds its content, so every widget reloads its data. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RefreshBox(topInset: Dp = 0.dp, content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var refreshing by remember { mutableStateOf(false) }
+    var tick by remember { mutableStateOf(0) }
+    val state = rememberPullToRefreshState()
+
+    PullToRefreshBox(
+        isRefreshing = refreshing,
+        onRefresh = {
+            scope.launch {
+                refreshing = true
+                EnergyRepo.clearCache()                 // forget saved Health Connect readings
+                HealthSync.syncNow(context)             // import and send, if switched on
+                tick++                                  // rebuild the screen below
+                delay(500)
+                refreshing = false
+            }
+        },
+        state = state,
+        modifier = Modifier.fillMaxSize(),
+        indicator = {
+            PullToRefreshDefaults.Indicator(
+                state = state,
+                isRefreshing = refreshing,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = topInset)
+            )
+        }
+    ) {
+        key(tick) { content() }
+    }
+}
+
+/** Lets any widget open a Profile page, for example "connections". Provided by FoodApp. */
+val LocalOpenPage = staticCompositionLocalOf<(String) -> Unit> { {} }
+
+@Composable
+fun rememberAiAvailable(): Boolean = GeminiKeys.available.collectAsState().value
+
+/** Shown in place of an AI feature while no Gemini key is connected. */
+@Composable
+fun AiLockedCard(title: String, message: String) {
+    val openPage = LocalOpenPage.current
+    WidgetCard(title, trailing = { Pill("Needs a key") }) {
+        Text(
+            message,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(8.dp))
+        Button(onClick = { openPage("connections") }) { Text("Get a free key") }
     }
 }

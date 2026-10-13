@@ -28,6 +28,9 @@ class FeaturePrefs(context: Context) {
             Feature("burn_week", "Eaten vs burned", "Last 7 days", "Burned"),
             Feature("burn_steps", "Daily steps", "Last 7 days", "Burned"),
             Feature("burn_outlook", "Where your weight is heading", "30-day outlook", "Burned"),
+            Feature("burn_sleep", "Sleep", "Last 7 nights", "Burned"),
+            Feature("burn_heart", "Heart rate", "Daily range", "Burned"),
+            Feature("burn_workouts", "Workouts", "Sessions that day", "Burned"),
 
             Feature("diet", "Diet warnings", "Diets and allergies", "Smart")
         )

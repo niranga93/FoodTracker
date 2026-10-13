@@ -1,5 +1,6 @@
 package com.example.foodtracker.backup
 
+import android.accounts.Account
 import android.content.Context
 import android.content.IntentSender
 import android.util.Log
@@ -10,6 +11,7 @@ import com.example.foodtracker.data.Meal
 import com.example.foodtracker.data.MealDb
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -67,12 +69,14 @@ object DriveAuth {
     // Only this app's own hidden folder in the user's Drive
     private val SCOPE = Scope("https://www.googleapis.com/auth/drive.appdata")
 
-    suspend fun authorize(context: Context): AuthResult {
+    /** accountName: the Gmail address to use. Null lets Google pick or ask. */
+    suspend fun authorize(context: Context, accountName: String? = null): AuthResult {
         return try {
-            val request = AuthorizationRequest.builder()
-                .setRequestedScopes(listOf(SCOPE))
-                .build()
-            val result = Identity.getAuthorizationClient(context).authorize(request).await()
+            val builder = AuthorizationRequest.builder().setRequestedScopes(listOf(SCOPE))
+            if (!accountName.isNullOrBlank() && accountName.contains("@")) {
+                builder.setAccount(Account(accountName, "com.google"))
+            }
+            val result = Identity.getAuthorizationClient(context).authorize(builder.build()).await()
             val pending = result.pendingIntent
             val token = result.accessToken
             when {
@@ -81,6 +85,16 @@ object DriveAuth {
                 token != null -> AuthResult.Token(token)
                 else -> AuthResult.Failure("Google did not return an access token")
             }
+        } catch (e: ApiException) {
+            AuthResult.Failure(
+                when {
+                    // No OAuth client for this package + SHA-1. Google reports it as 10, or 8 with this status.
+                    e.statusCode == 10 || e.message.orEmpty().contains("UNREGISTERED_ON_API_CONSOLE") ->
+                        "Google sign-in isn't set up for this version of the app."
+                    e.statusCode == 7 || e.statusCode == 8 -> "Couldn't reach Google. Check your connection."
+                    else -> "Google sign-in failed (code ${e.statusCode})."
+                }
+            )
         } catch (e: Exception) {
             AuthResult.Failure(e.message ?: "Google authorization failed")
         }
@@ -259,15 +273,25 @@ object BackupService {
     }
 
     fun applyRemote(db: MealDb, goalStore: GoalStore, remote: Remote, prefs: BackupPrefs) {
+        restoreData(db, goalStore, remote)
+        prefs.lastBackup = remote.savedAt
+        prefs.baselineSet = true
+        prefs.lastHash = 0
+    }
+
+    /** Replaces the phone's data. Leaves the Drive settings alone, so a file restore can't turn on auto-backup. */
+    fun restoreData(db: MealDb, goalStore: GoalStore, remote: Remote) {
         db.replaceAll(remote.meals)
         goalStore.save(remote.goals)
         val ctx = appContext
         val ex = remote.extras
         if (ctx != null && ex != null) BackupExtras.apply(ctx, ex)   // goals, profile, weigh-ins, settings...
-        prefs.lastBackup = remote.savedAt
-        prefs.baselineSet = true
-        prefs.lastHash = 0
     }
+
+    /** A complete backup as JSON text, for saving to any file location. */
+    fun buildFileBackup(db: MealDb, goals: Goals): String = BackupCodec.encode(db.all(), goals, extras())
+
+    fun parseFileBackup(json: String): Remote = BackupCodec.decode("", json)
 
     /** Fire-and-forget. Skips silently if nothing changed or on any failure. */
     fun autoBackup(context: Context) {
@@ -284,7 +308,7 @@ object BackupService {
                     val goals = GoalStore(app).load()
                     val fingerprint = BackupCodec.fingerprint(db.all(), goals, extras())
                     if (fingerprint == prefs.lastHash) return@withLock           // nothing changed
-                    val token = (DriveAuth.authorize(app) as? AuthResult.Token)?.value
+                    val token = (DriveAuth.authorize(app, prefs.email) as? AuthResult.Token)?.value
                         ?: return@withLock                                         // needs consent again: skip silently
                     backupNow(token, db, goals, prefs)
                 } catch (e: Exception) {

@@ -33,6 +33,7 @@ fun IntakeScreen(
 ) {
     val context = LocalContext.current
     val features = remember { FeaturePrefs(context) }
+    val aiOn = rememberAiAvailable()
     var meals by remember(dayOffset) { mutableStateOf(loadDay(db, dayOffset)) }
     val goals = remember { goalStore.load() }
     val budget by rememberBudget(db, goalStore, dayOffset)
@@ -145,7 +146,10 @@ fun IntakeScreen(
         if (features.isOn("in_timing")) item { MealTimingCard(meals) }
         if (features.isOn("in_top")) item { BiggestItemsCard(meals) }
         if (features.isOn("in_water")) item { HydrationCard(dayOffset) }
-        if (features.isOn("in_coach")) item { CoachCard(db, goalStore, dayOffset) }
+        if (features.isOn("in_coach")) item {
+            if (aiOn) CoachCard(db, goalStore, dayOffset)
+            else AiLockedCard("Coach note", "Add your free Gemini key to get a short daily note.")
+        }
     }
 }
 

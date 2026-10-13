@@ -1,7 +1,5 @@
 package com.example.foodtracker
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,19 +13,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
-// Hosted Privacy Policy URL on GitHub Pages
-const val PRIVACY_URL = "https://niranga93.github.io/FoodTracker/"
-
-fun openPrivacyPolicy(context: android.content.Context) {
-    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_URL)))
-}
+// PRIVACY_URL and openPrivacyPolicy live in AppInfo.kt
 
 @Composable
 fun PrivacyCard() {
     val context = LocalContext.current
     WidgetCard("Privacy") {
         Text(
-            "Your log stays on this phone. Photos and AI summaries go to Google Gemini when you use them.",
+            "Your log stays on this phone. Photos, meal descriptions, shared text and coach notes go to " +
+                "Google Gemini when you use them.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

@@ -64,9 +64,10 @@ android {
             buildConfigField("String", "GEMINI_API_KEY", "\"\"")
             buildConfigField("String", "GEMINI_API_KEY_2", "\"\"")
             buildConfigField("String", "GEMINI_API_KEY_3", "\"\"")
+            // Optimize the whole app. Limiting R8 to a packageScope made it move part of kotlin.text
+            // into another package, which crashed release builds at startup (IllegalAccessError).
             optimization {
                 enable = true
-                packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
             }
         }
     }

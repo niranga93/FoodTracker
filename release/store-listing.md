@@ -66,7 +66,9 @@ First release of Nourio.
 | Website | optional (for example https://niranga93.github.io/FoodTracker/) |
 | Phone | optional |
 
-## Graphics to prepare
+## Graphics
+The icon (`store/icon-512.png`) and feature graphic (`store/feature-graphic-1024x500.png`) are ready. Screenshots still need to be taken.
+
 | Asset | Spec |
 |---|---|
 | App icon | 512 x 512 PNG, 32-bit with alpha, max 1 MB |

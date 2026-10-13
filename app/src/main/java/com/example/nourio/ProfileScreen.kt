@@ -458,7 +458,7 @@ fun ProfileScreen(goalStore: GoalStore, db: MealDb, inner: PaddingValues) {
         TargetCard()
 
         Spacer(Modifier.height(12.dp))
-        GoalsCard(goalStore)
+        GoalsCard(goalStore, db)
 
         Spacer(Modifier.height(24.dp))
 

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- White Plate Ring -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5.8"
+        android:pathData="M 54,22.5 A 31.5,31.5 0 1,1 53.99,22.5 Z" />
+
+    <!-- Inner Orange Food Core -->
+    <path
+        android:fillColor="#FFA726"
+        android:pathData="M 54,39.5 A 14.5,14.5 0 1,1 53.99,39.5 Z" />
+
+    <!-- Leaf Accent -->
+    <path
+        android:fillColor="#C8E6C9"
+        android:pathData="M 56.16,38.88 C 64.8,10.8 92.88,15.12 88.56,41.04 C 88.56,41.04 56.16,38.88 56.16,38.88 Z" />
+</vector>

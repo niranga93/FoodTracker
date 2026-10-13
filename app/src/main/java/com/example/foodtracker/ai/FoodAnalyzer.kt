@@ -22,7 +22,7 @@ import kotlin.math.max
 
 object FoodAnalyzer {
     // If you get a 404, pick a current free Flash model in AI Studio and change this.
-    private const val MODEL = "gemini-1.5-flash"
+    private const val MODEL = "gemini-3.5-flash"
     private const val URL =
         "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent"
 
@@ -134,11 +134,7 @@ Return ONLY JSON, no other text, matching this schema:
     }
 
     /**
-     * Tries the available keys in order (key 1 preferred).
-     * - 429 (limit reached): rest that key for a while and move to the next key immediately.
-     * - 403 / invalid key: same, with a longer rest.
-     * - 5xx or network error: back off and retry the whole round (up to 4 rounds).
-     * - Any other error (e.g. 400, 404): fail fast, since another key won't help.
+     * Tries available keys in order, rotating to the next key on any failure (HTTP error or network error).
      */
     private suspend fun callWithFailover(bodyJson: String): String {
         check(keys.isNotEmpty()) { "No Gemini API key configured in local.properties" }
@@ -147,13 +143,15 @@ Return ONLY JSON, no other text, matching this schema:
 
         for (round in 0 until 4) {
             val now = System.currentTimeMillis()
-            // Keys that are not resting first, then the rest ordered by soonest recovery
             val order = keys.indices.sortedWith(
                 compareBy({ coolingUntil[it] > now }, { coolingUntil[it] })
             )
-            var retryable = false
+            var triedAnyInRound = false
 
             for (i in order) {
+                if (coolingUntil[i] > now) continue
+                triedAnyInRound = true
+
                 try {
                     val request = Request.Builder()
                         .url(URL)
@@ -167,41 +165,28 @@ Return ONLY JSON, no other text, matching this schema:
                             return raw
                         }
                         lastError = "HTTP ${resp.code}: ${raw.take(300)}"
-                        val keyInvalid = resp.code == 403 ||
-                                raw.contains("API_KEY_INVALID") || raw.contains("API key not valid")
-                        when {
-                            resp.code == 429 -> {
-                                Log.w("Gemini", "key #${i + 1} hit its limit, trying next")
-                                coolingUntil[i] = System.currentTimeMillis() + RATE_LIMIT_COOLDOWN_MS
-                                lastError = "Gemini free limit reached (HTTP 429)"
-                            }
-                            keyInvalid -> {
-                                Log.w("Gemini", "key #${i + 1} rejected, trying next")
-                                coolingUntil[i] = System.currentTimeMillis() + BAD_KEY_COOLDOWN_MS
-                            }
-                            resp.code in listOf(500, 502, 503, 504) -> retryable = true
-                            else -> error(lastError)   // bad request, wrong model, etc.
-                        }
+                        Log.w("Gemini", "key #${i + 1} failed ($lastError), trying next key")
+                        
+                        val cooldown = if (resp.code == 429) RATE_LIMIT_COOLDOWN_MS else BAD_KEY_COOLDOWN_MS
+                        coolingUntil[i] = System.currentTimeMillis() + cooldown
                     }
-                } catch (e: IOException) {             // includes timeouts
+                } catch (e: IOException) {
                     lastError = "Network error: ${e.message}"
-                    retryable = true
+                    Log.w("Gemini", "key #${i + 1} network error: ${e.message}, trying next key")
                 }
             }
 
-            if (!retryable) break                      // every key is out of quota or rejected
+            if (!triedAnyInRound) {
+                coolingUntil.fill(0L) // Reset cool-down if all keys are resting
+            }
+
             if (round < 3) {
                 delay(waitMs)
-                waitMs *= 2                            // 2s, 4s, 8s
+                waitMs *= 2
             }
         }
 
-        error(
-            if (lastError.contains("429"))
-                "Gemini free limit reached on all keys. Try again in a few minutes."
-            else
-                "Gemini request failed. $lastError"
-        )
+        error("All Gemini API keys failed. Last error: $lastError")
     }
 
     private fun encodeImage(file: File): String {

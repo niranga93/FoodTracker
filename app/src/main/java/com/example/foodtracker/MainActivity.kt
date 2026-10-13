@@ -333,7 +333,7 @@ fun MainScaffold(
         }
     ) { inner ->
         when (tab) {
-            NavTab.Home -> HomeScreen(db, goalStore, dayOffset, onDayChange, inner)
+            NavTab.Home -> HomeScreen(db, goalStore, dayOffset, onDayChange, onTab, inner)
             NavTab.Intake -> IntakeScreen(db, goalStore, dayOffset, onDayChange, onEditMeal, onOpenHistory, inner)
             NavTab.Burned -> BurnedScreen(db, dayOffset, onDayChange, inner)
             NavTab.Profile -> ProfileScreen(goalStore, db, inner)

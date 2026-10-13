@@ -255,6 +255,8 @@ fun BurnedScreen(db: MealDb, dayOffset: Int, onDayChange: (Int) -> Unit, inner: 
                 }
             }
 
+            item { PredictionCard(db) }
+
             item {
                 AppCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp)) {

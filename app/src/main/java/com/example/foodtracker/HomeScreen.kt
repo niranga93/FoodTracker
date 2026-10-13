@@ -79,6 +79,7 @@ fun HomeScreen(
     goalStore: GoalStore,
     dayOffset: Int,
     onDayChange: (Int) -> Unit,
+    onOpenTab: (NavTab) -> Unit,
     inner: PaddingValues
 ) {
     val context = LocalContext.current
@@ -248,5 +249,9 @@ fun HomeScreen(
                 }
             }
         }
+
+        item { ForecastSummaryCard(db, onDetails = { onOpenTab(NavTab.Burned) }) }
     }
 }
+
+

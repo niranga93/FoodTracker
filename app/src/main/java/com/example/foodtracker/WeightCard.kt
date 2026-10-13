@@ -52,6 +52,58 @@ private fun syncProfileWeight(context: Context, entries: List<WeightEntry>) {
     store.save(store.load().copy(weightKg = latest.kg))
 }
 
+/** Asks for a weight and a day, saves it, and updates the profile weight. */
+@Composable
+fun LogWeightDialog(onDismiss: () -> Unit, onSaved: () -> Unit) {
+    val context = LocalContext.current
+    val weightDb = remember { WeightDb(context) }
+    var kgText by remember {
+        mutableStateOf(
+            weightDb.all().lastOrNull()?.kg?.f1()
+                ?: ProfileStore(context).load().weightKg.let { if (it > 0) it.f1() else "" }
+        )
+    }
+    var offset by remember { mutableStateOf(0) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Log weight") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = kgText,
+                    onValueChange = { kgText = it; error = null },
+                    label = { Text("Weight") },
+                    suffix = { Text("kg") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                DateNavigator(offset) { offset = it }
+                error?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val kg = kgText.replace(',', '.').toDoubleOrNull()
+                if (kg == null || kg !in 20.0..400.0) {
+                    error = "Enter a weight between 20 and 400 kg."
+                } else {
+                    weightDb.add(timestampForOffset(offset), kg)
+                    syncProfileWeight(context, weightDb.all())
+                    onSaved()
+                    onDismiss()
+                }
+            }) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
 @Composable
 fun WeightCard() {
     val context = LocalContext.current
@@ -60,44 +112,9 @@ fun WeightCard() {
     var showAdd by remember { mutableStateOf(false) }
 
     if (showAdd) {
-        var kgText by remember { mutableStateOf(entries.lastOrNull()?.kg?.f1() ?: "") }
-        var offset by remember { mutableStateOf(0) }
-        var error by remember { mutableStateOf<String?>(null) }
-        AlertDialog(
-            onDismissRequest = { showAdd = false },
-            title = { Text("Log weight") },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = kgText,
-                        onValueChange = { kgText = it; error = null },
-                        label = { Text("Weight") },
-                        suffix = { Text("kg") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    DateNavigator(offset) { offset = it }
-                    error?.let {
-                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val kg = kgText.replace(',', '.').toDoubleOrNull()
-                    if (kg == null || kg !in 20.0..400.0) {
-                        error = "Enter a weight between 20 and 400 kg."
-                    } else {
-                        weightDb.add(timestampForOffset(offset), kg)
-                        entries = weightDb.all()
-                        syncProfileWeight(context, entries)
-                        showAdd = false
-                    }
-                }) { Text("Save") }
-            },
-            dismissButton = { TextButton(onClick = { showAdd = false }) { Text("Cancel") } }
+        LogWeightDialog(
+            onDismiss = { showAdd = false },
+            onSaved = { entries = weightDb.all() }
         )
     }
 
@@ -108,7 +125,7 @@ fun WeightCard() {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Weight", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text("Weight log", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Button(onClick = { showAdd = true }) { Text("Log weight") }
             }
             Spacer(Modifier.height(8.dp))
@@ -136,8 +153,11 @@ fun WeightCard() {
                 Spacer(Modifier.height(8.dp))
                 WeightChart(window, windowTrend)
                 Spacer(Modifier.height(8.dp))
-                Text("Recent weigh-ins", style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "Recent weigh-ins",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 entries.takeLast(5).reversed().forEach { e ->
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(

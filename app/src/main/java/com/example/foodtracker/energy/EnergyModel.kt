@@ -32,7 +32,9 @@ data class Prediction(
     val low30Kg: Double,
     val high30Kg: Double,
     val activityDays: Int,
-    val largeDeficit: Boolean
+    val largeDeficit: Boolean,
+    val avgEaten: Double = 0.0,
+    val avgBurned: Double = 0.0
 )
 
 data class Calibration(
@@ -123,7 +125,9 @@ object EnergyModel {
             low30Kg = minOf(a, b),
             high30Kg = maxOf(a, b),
             activityDays = usable.count { it.source != BurnSource.BMR_ONLY },
-            largeDeficit = avg < -1000.0
+            largeDeficit = avg < -1000.0,
+            avgEaten = usable.map { it.eaten }.average(),
+            avgBurned = usable.map { it.burned }.average()
         )
     }
 

@@ -49,4 +49,26 @@ class FoodCache(context: Context) : SQLiteOpenHelper(context, "food_cache.db", n
             "cache", null, values, SQLiteDatabase.CONFLICT_REPLACE
         )
     }
+
+    /** Raw cache rows whose key starts with the prefix (used for saved match corrections). */
+    fun dumpPrefix(prefix: String): Map<String, String> {
+        val out = HashMap<String, String>()
+        readableDatabase.rawQuery("SELECT `key`, json FROM cache WHERE `key` LIKE ?", arrayOf("$prefix%")).use { c ->
+            while (c.moveToNext()) out[c.getString(0)] = c.getString(1)
+        }
+        return out
+    }
+
+    fun putRaw(key: String, json: String) {
+        val values = ContentValues().apply {
+            put("`key`", key)
+            put("json", json)
+            put("ts", System.currentTimeMillis())
+        }
+        writableDatabase.insertWithOnConflict("cache", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    fun deletePrefix(prefix: String) {
+        writableDatabase.delete("cache", "`key` LIKE ?", arrayOf("$prefix%"))
+    }
 }

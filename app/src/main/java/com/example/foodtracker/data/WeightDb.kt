@@ -37,4 +37,22 @@ class WeightDb(context: Context) : SQLiteOpenHelper(context, "weights.db", null,
         }
         return out
     }
+
+    fun replaceAll(entries: List<WeightEntry>) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("weights", null, null)
+            for (e in entries) {
+                val v = ContentValues().apply {
+                    put("ts", e.ts)
+                    put("kg", e.kg)
+                }
+                db.insert("weights", null, v)
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
 }

@@ -47,6 +47,11 @@ class BackupPrefs(context: Context) {
         get() = p.getLong("last", 0L)
         set(v) { p.edit().putLong("last", v).apply() }
 
+    // Fingerprint of the last uploaded content, so auto-backup skips when nothing changed
+    var lastHash: Int
+        get() = p.getInt("hash", 0)
+        set(v) { p.edit().putInt("hash", v).apply() }
+
     fun clear() { p.edit().clear().apply() }
 }
 
@@ -160,11 +165,12 @@ data class Remote(
     val fileId: String,
     val savedAt: Long,
     val goals: Goals,
-    val meals: List<Meal>
+    val meals: List<Meal>,
+    val extras: JSONObject? = null
 )
 
 object BackupCodec {
-    fun encode(meals: List<Meal>, goals: Goals): String {
+    private fun mealsJson(meals: List<Meal>): JSONArray {
         val arr = JSONArray()
         meals.forEach { m ->
             val items = JSONArray()
@@ -176,23 +182,29 @@ object BackupCodec {
                     .put("items", items)
             )
         }
-        return JSONObject()
-            .put("version", 1)
-            .put("savedAt", System.currentTimeMillis())
-            .put(
-                "goals",
-                JSONObject()
-                    .put("kcal", goals.kcal).put("sugar", goals.sugar).put("fat", goals.fat)
-                    .put("satFat", goals.satFat).put("sodium", goals.sodiumMg).put("carbs", goals.carbs)
-                    .put("protein", goals.protein).put("fiber", goals.fiber)
-            )
-            .put("meals", arr)
-            .toString()
+        return arr
     }
+
+    private fun goalsJson(goals: Goals) =
+        JSONObject().put("kcal", goals.kcal).put("sugar", goals.sugar).put("fat", goals.fat)
+
+    fun encode(meals: List<Meal>, goals: Goals, extras: JSONObject?): String {
+        val root = JSONObject()
+            .put("version", 2)
+            .put("savedAt", System.currentTimeMillis())
+            .put("goals", goalsJson(goals))
+            .put("meals", mealsJson(meals))
+        if (extras != null) root.put("extras", extras)
+        return root.toString()
+    }
+
+    /** Changes only when the content changes, not with the timestamp. */
+    fun fingerprint(meals: List<Meal>, goals: Goals, extras: JSONObject?): Int =
+        (mealsJson(meals).toString() + goalsJson(goals).toString() + (extras?.toString() ?: "")).hashCode()
 
     fun decode(fileId: String, json: String): Remote {
         val root = JSONObject(json)
-        if (root.optInt("version", 0) != 1) error("Unsupported backup file version")
+        if (root.optInt("version", 0) !in 1..2) error("Unsupported backup file version")
         val g = root.optJSONObject("goals")
         val goals = Goals(
             kcal = g?.optDouble("kcal", 0.0) ?: 0.0,
@@ -215,7 +227,7 @@ object BackupCodec {
                 items = (0 until items.length()).map { FoodItem.fromJson(items.getJSONObject(it)) }
             )
         }
-        return Remote(fileId, root.optLong("savedAt", 0L), goals, meals)
+        return Remote(fileId, root.optLong("savedAt", 0L), goals, meals, root.optJSONObject("extras"))
     }
 }
 
@@ -224,6 +236,14 @@ object BackupCodec {
 object BackupService {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
+    @Volatile private var appContext: Context? = null
+
+    fun init(context: Context) {
+        appContext = context.applicationContext
+    }
+
+    private fun extras(): JSONObject? =
+        appContext?.let { ctx -> runCatching { BackupExtras.collect(ctx) }.getOrNull() }
 
     fun fetchRemote(token: String): Remote? {
         val id = DriveApi.findFileId(token) ?: return null
@@ -231,21 +251,28 @@ object BackupService {
     }
 
     fun backupNow(token: String, db: MealDb, goals: Goals, prefs: BackupPrefs) {
-        val json = BackupCodec.encode(db.all(), goals)
-        DriveApi.upload(token, DriveApi.findFileId(token), json)
+        val meals = db.all()
+        val extras = extras()
+        DriveApi.upload(token, DriveApi.findFileId(token), BackupCodec.encode(meals, goals, extras))
         prefs.lastBackup = System.currentTimeMillis()
+        prefs.lastHash = BackupCodec.fingerprint(meals, goals, extras)
     }
 
     fun applyRemote(db: MealDb, goalStore: GoalStore, remote: Remote, prefs: BackupPrefs) {
         db.replaceAll(remote.meals)
         goalStore.save(remote.goals)
+        val ctx = appContext
+        val ex = remote.extras
+        if (ctx != null && ex != null) BackupExtras.apply(ctx, ex)   // goals, profile, weigh-ins, settings...
         prefs.lastBackup = remote.savedAt
         prefs.baselineSet = true
+        prefs.lastHash = 0
     }
 
-    /** Fire-and-forget. Call after any change to meals or goals. Silent on any failure. */
+    /** Fire-and-forget. Skips silently if nothing changed or on any failure. */
     fun autoBackup(context: Context) {
         val app = context.applicationContext
+        appContext = app
         val prefs = BackupPrefs(app)
         if (prefs.email == null || !prefs.baselineSet) return
         scope.launch {
@@ -254,9 +281,12 @@ object BackupService {
                 try {
                     // Never overwrite a cloud copy with an empty phone
                     if (db.count() == 0) return@withLock
+                    val goals = GoalStore(app).load()
+                    val fingerprint = BackupCodec.fingerprint(db.all(), goals, extras())
+                    if (fingerprint == prefs.lastHash) return@withLock           // nothing changed
                     val token = (DriveAuth.authorize(app) as? AuthResult.Token)?.value
-                        ?: return@withLock           // needs the user to consent again: skip silently
-                    backupNow(token, db, GoalStore(app).load(), prefs)
+                        ?: return@withLock                                         // needs consent again: skip silently
+                    backupNow(token, db, goals, prefs)
                 } catch (e: Exception) {
                     Log.w("Backup", "auto-backup failed", e)
                 } finally {

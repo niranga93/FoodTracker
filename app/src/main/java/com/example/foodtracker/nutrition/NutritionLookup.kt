@@ -33,6 +33,16 @@ object NutritionLookup {
         if (!::cache.isInitialized) cache = FoodCache(context.applicationContext)
     }
 
+    /** Matches the user picked by hand, for the backup. */
+    fun exportCorrections(): Map<String, String> =
+        if (::cache.isInitialized) cache.dumpPrefix("fix|") else emptyMap()
+
+    fun importCorrections(map: Map<String, String>) {
+        if (!::cache.isInitialized) return
+        cache.deletePrefix("fix|")
+        map.forEach { (k, v) -> cache.putRaw(k, v) }
+    }
+
     /** A match the user picked by hand for this food name, if any. */
     fun correctionFor(itemName: String): Per100g? =
         if (::cache.isInitialized) cache.get("fix|" + itemName.trim().lowercase()) else null

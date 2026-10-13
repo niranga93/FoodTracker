@@ -208,10 +208,10 @@ fun BackupCard(db: MealDb, goalStore: GoalStore) {
             "Access" to "This app's private folder only",
             "Last backup" to (if (lastBackup > 0) fmt.format(Date(lastBackup)) else "None from this phone yet"),
             "Auto-backup" to (if (prefs.baselineSet) "On" else "Starts after your first backup or restore"),
-            "Stores" to "Meals and daily goals"
+            "Stores" to "Meals, weigh-ins, profile, settings"
         ) else listOf(
             "Access" to "This app's private folder only. It can't see your other Drive files",
-            "Stores" to "Meals and daily goals"
+            "Stores" to "Meals, weigh-ins, profile, settings"
         ),
         disconnectNote = "Auto-backup will stop on this phone. Your copy in Google Drive stays.",
         onConnect = { startAuth("signin") },

@@ -124,6 +124,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         NutritionLookup.init(applicationContext)
         PortionStore.init(applicationContext)
+        BackupService.init(applicationContext)
         if (savedInstanceState == null) openPendingFrom(intent)
         // Photos queued offline get another chance whenever the app starts
         if (PendingMeals.all(this).any { it.status == PendingStatus.WAITING }) AnalyzePendingWorker.enqueue(this)
@@ -155,6 +156,11 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         openPendingFrom(intent)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        BackupService.autoBackup(this)      // saves anything changed while the app was open
     }
 
     /** Opens the review for a queued photo when started from its "ready to review" notification. */

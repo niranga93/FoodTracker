@@ -9,14 +9,20 @@ val localProps = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+// Upload key for Play releases. keystore.properties is gitignored and lives only on this PC.
+val keystoreProps = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
 android {
-    namespace = "com.example.foodtracker"
+    namespace = "com.example.nourio"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.nnrzone.fuelo"
+        applicationId = "com.nnrzone.nourio"
         minSdk = 26
         targetSdk = 37
         versionCode = 1
@@ -41,8 +47,20 @@ android {
         )
     }
 
+    signingConfigs {
+        if (keystoreProps.getProperty("storeFile") != null) {
+            create("release") {
+                storeFile = file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             buildConfigField("String", "GEMINI_API_KEY", "\"\"")
             buildConfigField("String", "GEMINI_API_KEY_2", "\"\"")
             buildConfigField("String", "GEMINI_API_KEY_3", "\"\"")
@@ -78,17 +96,18 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
-    implementation("androidx.camera:camera-core:1.4.2")
-    implementation("androidx.camera:camera-camera2:1.4.2")
-    implementation("androidx.camera:camera-lifecycle:1.4.2")
-    implementation("androidx.camera:camera-view:1.4.2")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.google.mlkit:barcode-scanning:17.3.0")
-    implementation("androidx.compose.material:material-icons-core")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.0")
-    implementation("androidx.health.connect:connect-client:1.1.0")
-    implementation("com.google.android.gms:play-services-auth:21.6.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
-    implementation("androidx.work:work-runtime-ktx:2.10.1")
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.okhttp)
+    implementation(libs.mlkit.barcode.scanning)
+    implementation(libs.androidx.compose.material.icons.core)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.health.connect.client)
+    implementation(libs.play.services.auth)
+    implementation(libs.kotlinx.coroutines.play.services)
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.exifinterface)
 }

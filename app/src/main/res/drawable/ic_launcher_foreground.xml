@@ -4,24 +4,22 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- White Plate Ring -->
+    <!-- Mint calorie ring -->
     <path
         android:fillColor="#00000000"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="5.8"
-        android:pathData="M 54,22.5 A 31.5,31.5 0 1,1 53.99,22.5 Z" />
+        android:strokeColor="#3DDC97"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:pathData="M54,54m-24,0a24,24 0,1 1,48 0a24,24 0,1 1,-48 0" />
 
-    <!-- Inner Orange Food Core -->
-    <path
-        android:fillColor="#FFA726"
-        android:pathData="M 54,39.5 A 14.5,14.5 0 1,1 53.99,39.5 Z" />
-
-    <!-- Leaf Accent -->
+    <!-- Leaf -->
     <path
         android:pathData="M54,40 C63,45 66,54 60,62 C56,67 49,67 46,62 C42,56 45,46 54,40 Z"
-        android:fillColor="#FFFFFF"/>
+        android:fillColor="#FFFFFF" />
     <path
         android:pathData="M49,63 L57,50"
-        android:strokeColor="#0E1A13" android:strokeWidth="2"
-        android:strokeLineCap="round" android:fillColor="#00000000"/>
+        android:strokeColor="#0E1A13"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
 </vector>

@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "FoodTracker"
+rootProject.name = "Nourio"
 include(":app")

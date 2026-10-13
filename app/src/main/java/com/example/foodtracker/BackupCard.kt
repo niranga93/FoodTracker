@@ -199,7 +199,7 @@ fun BackupCard(db: MealDb, goalStore: GoalStore) {
     val mail = email
     ConnectorCard(
         title = "Google Drive",
-        subtitle = "Back up your meals to a private folder in your own Drive and restore them on a new phone.",
+        subtitle = "Back up and restore your meals.",
         connected = mail != null,
         statusLabel = if (mail != null) "Connected" else "Not connected",
         busy = busy,

@@ -125,14 +125,13 @@ fun WeightCard() {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Weight log", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text("Weigh-ins", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Button(onClick = { showAdd = true }) { Text("Log weight") }
             }
             Spacer(Modifier.height(8.dp))
             if (entries.isEmpty()) {
                 Text(
-                    "Log your weight a few times a week. After about two weeks of weigh-ins and meals, " +
-                        "the forecast learns how your body actually responds.",
+                    "Log your weight a few times a week.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

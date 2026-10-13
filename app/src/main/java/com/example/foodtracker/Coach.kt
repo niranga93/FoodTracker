@@ -174,15 +174,14 @@ fun CoachCard(db: MealDb, goalStore: GoalStore, dayOffset: Int) {
             val t = text
             when {
                 loading -> Text(
-                    "Writing your summary…",
+                    "Writing…",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 t != null -> {
                     Text(t, style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        "Generated ${timeFmt.format(Date(generatedAt))}. AI-generated general information, " +
-                            "not medical advice.",
+                        "${timeFmt.format(Date(generatedAt))} · AI-generated, not medical advice",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 8.dp)
@@ -190,13 +189,13 @@ fun CoachCard(db: MealDb, goalStore: GoalStore, dayOffset: Int) {
                     TextButton(onClick = { request() }, enabled = hasMeals) { Text("Refresh") }
                 }
                 !hasMeals -> Text(
-                    "Log at least one meal to get a summary for this day.",
+                    "Log a meal first.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 else -> {
                     Text(
-                        "A short, friendly summary of this day with one idea to try next.",
+                        "One short note on your day.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

@@ -118,7 +118,7 @@ fun MatchPickerDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "Remember this choice for \"$foodName\"",
+                        "Remember my choice",
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.weight(1f)
                     )

@@ -18,7 +18,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.foodtracker.data.MealDb
 import com.example.foodtracker.data.WaterStore
@@ -39,7 +38,6 @@ fun DataCard(db: MealDb) {
     var message by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
 
-    // You pick where the file goes; the app never uploads it anywhere
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/csv")
     ) { uri ->
@@ -59,7 +57,7 @@ fun DataCard(db: MealDb) {
                         out.use { it.write(csv.toByteArray(Charsets.UTF_8)) }
                     }
                 }
-                message = result.fold({ "Saved." }, { "Export failed: ${it.message}" })
+                message = result.fold({ "Saved." }, { "Failed: ${it.message}" })
                 busy = false
             }
         }
@@ -72,40 +70,19 @@ fun DataCard(db: MealDb) {
         launcher.launch("$baseName-$date.csv")
     }
 
-    AppCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            Text("Your data", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            Text(
-                "Export to a spreadsheet-friendly CSV file. You choose where to save it, " +
-                    "for example Downloads or Google Drive.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
-            )
-            OutlinedButton(
-                onClick = { start("meals", "foodtracker-meals") },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Export meals (one row per food)") }
+    WidgetCard("Export to CSV") {
+        Column {
+            OutlinedButton(onClick = { start("meals", "foodtracker-meals") }, enabled = !busy,
+                modifier = Modifier.fillMaxWidth()) { Text("Meals") }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = { start("daily", "foodtracker-daily") },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Export daily totals and water") }
+            OutlinedButton(onClick = { start("daily", "foodtracker-daily") }, enabled = !busy,
+                modifier = Modifier.fillMaxWidth()) { Text("Daily totals") }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = { start("weights", "foodtracker-weights") },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Export weight log") }
+            OutlinedButton(onClick = { start("weights", "foodtracker-weights") }, enabled = !busy,
+                modifier = Modifier.fillMaxWidth()) { Text("Weights") }
             message?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 8.dp))
             }
         }
     }

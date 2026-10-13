@@ -149,13 +149,4 @@ fun IntakeScreen(
     }
 }
 
-/** The old History tab, now a full screen opened from the Intake page. */
-@Composable
-fun HistoryPage(db: MealDb, goalStore: GoalStore, onBack: () -> Unit, onOpenDay: (Int) -> Unit) {
-    Column(Modifier.fillMaxSize().systemBarsPadding()) {
-        ScreenTopBar("History", onBack)
-        Box(Modifier.weight(1f)) {
-            HistoryScreen(db, goalStore, PaddingValues(0.dp), onOpenDay)
-        }
-    }
-}
+

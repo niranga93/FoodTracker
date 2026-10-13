@@ -84,7 +84,7 @@ fun FavoriteMealsScreen(db: MealDb, initialOffset: Int, onBack: () -> Unit, onDo
         }
         if (favs.isEmpty()) {
             Text(
-                "No favorites yet. On the Intake page, open a meal's ⋮ menu and choose Save as favorite.",
+                "No favorites yet. Use a meal's ⋮ menu.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(16.dp)

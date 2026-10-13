@@ -104,7 +104,7 @@ fun ManualEntryScreen(
             val r = withContext(Dispatchers.IO) { runCatching { NutritionLookup.searchMany(query.trim(), 10) } }
             r.onSuccess {
                 results = it
-                if (it.isEmpty()) searchError = "No results. Try a simpler name, like rice, cooked."
+                if (it.isEmpty()) searchError = "No results. Try a simpler name."
             }.onFailure {
                 searchError = it.message ?: "Search failed"
             }
@@ -174,7 +174,7 @@ fun ManualEntryScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    "Type what's on the label or your own estimate. Only calories are required.",
+                    "Only calories are required.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -289,7 +289,7 @@ fun ManualEntryScreen(
                         }
                     }
                     else -> Text(
-                        "Search USDA FoodData Central by name, then pick the closest match.",
+                        "Search a food, then pick a match.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -344,7 +344,7 @@ fun ManualEntryScreen(
                         }
                     }
                     shown.isEmpty() -> Text(
-                        "Foods you log will appear here. Tap the heart to pin favorites to the top.",
+                        "Your logged foods appear here. Heart = favorite.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

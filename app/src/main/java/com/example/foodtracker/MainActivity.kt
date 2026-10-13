@@ -882,7 +882,7 @@ fun ReviewScreen(
         when {
             state.isLoading -> AnalyzingView(
                 "Analyzing your meal…",
-                "Identifying foods and looking up nutrition",
+                "Identifying foods…",
                 Modifier.weight(1f).fillMaxWidth()
             )
             state.offline -> Column(Modifier.weight(1f).padding(16.dp)) {
@@ -1026,8 +1026,7 @@ fun ScannedScreen(
                         onRemove = onRescan
                     )
                     Text(
-                        "Grams default to one serving (or 100 g if the product lists none). " +
-                                "Set the amount you actually ate.",
+                        "Set the amount you ate.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1105,9 +1104,9 @@ fun ItemRow(
                     )
                     Text(
                         when (food.matchedName) {
-                            null -> "No USDA match - nutrition not counted"
-                            AI_ESTIMATE -> "No USDA match - using the AI's nutrition estimate"
-                            else -> "USDA: ${food.matchedName}"
+                            null -> "No match · not counted"
+                            AI_ESTIMATE -> "AI estimate"
+                            else -> food.matchedName
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = when (food.matchedName) {

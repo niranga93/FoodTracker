@@ -84,7 +84,7 @@ fun ProfileHub(onOpenPage: (String) -> Unit, inner: PaddingValues) {
                     }
                 ) { onOpenPage("diet") }
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                NavRow("Weight log", latest?.let { "${it.kg.f1()} kg" } ?: "No entries") { onOpenPage("weight") }
+                NavRow("Weigh-ins", latest?.let { "${it.kg.f1()} kg" } ?: "No entries") { onOpenPage("weight") }
             }
         }
         AppCard(Modifier.fillMaxWidth()) {
@@ -108,7 +108,7 @@ fun PageScreen(id: String, db: MealDb, goalStore: GoalStore, onBack: () -> Unit)
         "me" -> "Personal details"
         "goals" -> "Goals & target"
         "diet" -> "Diet & allergies"
-        "weight" -> "Weight log"
+        "weight" -> "Weigh-ins"
         "connections" -> "Connections"
         "data" -> "Data & privacy"
         else -> "Settings"

@@ -28,14 +28,8 @@ fun DietCard() {
         store.save(n)
     }
 
-    AppCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Diet & allergies", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            Text(
-                "Foods that may conflict get a warning when you log them. Saved on this phone.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+    WidgetCard("Diet & allergies") {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Diet", style = MaterialTheme.typography.labelMedium)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -70,12 +64,11 @@ fun DietCard() {
                     otherText = it
                     update(s.copy(other = it.split(',').map { w -> w.trim().lowercase() }.filter { w -> w.isNotBlank() }))
                 },
-                label = { Text("Other foods to avoid (comma separated)") },
+                label = { Text("Also avoid (comma separated)") },
                 modifier = Modifier.fillMaxWidth()
             )
             Text(
-                "Warnings are best effort. Photos can't show hidden ingredients, so always check labels " +
-                    "if you have a serious allergy.",
+                "Best effort. Always check labels if you have an allergy.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -115,8 +108,7 @@ fun DietBanner(items: List<FoodItem>) {
     if (flagged > 0) {
         AppCard(Modifier.fillMaxWidth()) {
             Text(
-                "⚠ $flagged item${if (flagged == 1) "" else "s"} may conflict with your diet or allergies. " +
-                    "Photos can't show hidden ingredients, so check labels if you have a serious allergy.",
+                "⚠ $flagged item${if (flagged == 1) "" else "s"} may conflict with your diet or allergies. Check labels if you have an allergy.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(16.dp)

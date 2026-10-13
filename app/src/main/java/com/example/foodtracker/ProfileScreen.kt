@@ -245,8 +245,7 @@ private fun HealthConnectorContent() {
 
     ConnectorCard(
         title = "Health Connect",
-        subtitle = "Steps and calories burned, collected by Health Connect from your phone, " +
-            "watch, and apps such as Google Health or Samsung Health.",
+        subtitle = "Steps and calories burned.",
         connected = connected,
         statusLabel = when {
             granted == null -> "Checking…"
@@ -262,8 +261,7 @@ private fun HealthConnectorContent() {
             "Total calories" to allowed(totalP),
             "Access" to "Read-only. Data stays on this phone"
         ),
-        disconnectNote = "Steps and calories burned will be hidden in this app. " +
-            "You can connect again any time. The app may restart briefly.",
+        disconnectNote = "Steps and calories will be hidden. You can reconnect any time.",
         onConnect = {
             if (all) {
                 prefs.enabled = true      // already permitted: just switch it back on

@@ -6,12 +6,15 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import com.example.foodtracker.ai.ImageUtil
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
@@ -45,7 +48,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Star
-import com.example.foodtracker.ai.ImageUtil
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -191,6 +193,23 @@ fun FoodApp(nav: NavViewModel = viewModel()) {
         pending = null
     }
 
+    val scope = rememberCoroutineScope()
+    val galleryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val file = withContext(Dispatchers.IO) { ImageUtil.copyToCache(context, uri) }
+                if (file == null) {
+                    Toast.makeText(context, "Could not open that photo", Toast.LENGTH_SHORT).show()
+                } else {
+                    ImageUtil.photoDayOffset(file)?.let { nav.setDay(it) }   // preselect the day it was taken
+                    nav.open(Screen.Review(file))
+                }
+            }
+        }
+    }
+
     fun go(target: Screen) {
         if (hasPermission) nav.open(target)
         else {
@@ -212,6 +231,11 @@ fun FoodApp(nav: NavViewModel = viewModel()) {
             dayOffset = state.dayOffset,
             onDayChange = nav::setDay,
             onPhoto = { go(Screen.Camera) },
+            onGallery = {
+                galleryLauncher.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                )
+            },
             onScan = { go(Screen.Barcode) },
             onManual = { nav.open(Screen.Manual) },
             onFavorites = { nav.open(Screen.Favorites) },
@@ -278,6 +302,7 @@ fun MainScaffold(
     dayOffset: Int,
     onDayChange: (Int) -> Unit,
     onPhoto: () -> Unit,
+    onGallery: () -> Unit,
     onScan: () -> Unit,
     onManual: () -> Unit,
     onFavorites: () -> Unit,
@@ -304,7 +329,7 @@ fun MainScaffold(
             }
         },
         floatingActionButton = {
-            if (tab == NavTab.Home || tab == NavTab.Intake) AddFab(onPhoto, onScan, onManual, onFavorites)
+            if (tab == NavTab.Home || tab == NavTab.Intake) AddFab(onPhoto, onGallery, onScan, onManual, onFavorites)
         }
     ) { inner ->
         when (tab) {
@@ -317,7 +342,13 @@ fun MainScaffold(
 }
 
 @Composable
-fun AddFab(onPhoto: () -> Unit, onScan: () -> Unit, onManual: () -> Unit, onFavorites: () -> Unit) {
+fun AddFab(
+    onPhoto: () -> Unit,
+    onGallery: () -> Unit,
+    onScan: () -> Unit,
+    onManual: () -> Unit,
+    onFavorites: () -> Unit
+) {
     var open by remember { mutableStateOf(false) }
     Box {
         ExtendedFloatingActionButton(
@@ -328,7 +359,8 @@ fun AddFab(onPhoto: () -> Unit, onScan: () -> Unit, onManual: () -> Unit, onFavo
             contentColor = MaterialTheme.colorScheme.onPrimary
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(text = { Text("Photo of a meal") }, onClick = { open = false; onPhoto() })
+            DropdownMenuItem(text = { Text("Take a photo") }, onClick = { open = false; onPhoto() })
+            DropdownMenuItem(text = { Text("Photo from gallery") }, onClick = { open = false; onGallery() })
             DropdownMenuItem(text = { Text("Scan a barcode") }, onClick = { open = false; onScan() })
             DropdownMenuItem(text = { Text("Add manually") }, onClick = { open = false; onManual() })
             DropdownMenuItem(text = { Text("Favorite meals") }, onClick = { open = false; onFavorites() })

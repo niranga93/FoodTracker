@@ -285,7 +285,6 @@ fun FoodApp(nav: NavViewModel = viewModel()) {
             onManual = { nav.open(Screen.Manual) },
             onDescribe = { nav.open(Screen.Describe()) },
             onEditMeal = { nav.open(Screen.EditMeal(it)) },
-            onOpenPending = { nav.open(Screen.ReviewPending(it)) },
             onOpenHistory = { nav.open(Screen.History) },
             onOpenPage = { nav.open(Screen.Page(it)) }
         )
@@ -394,7 +393,6 @@ fun MainScaffold(
     onManual: () -> Unit,
     onDescribe: () -> Unit,
     onEditMeal: (Long) -> Unit,
-    onOpenPending: (Long) -> Unit,
     onOpenHistory: () -> Unit,
     onOpenPage: (String) -> Unit
 ) {
@@ -423,7 +421,7 @@ fun MainScaffold(
     ) { inner ->
         when (tab) {
             NavTab.Home -> HomeScreen(db, goalStore, dayOffset, onDayChange, onTab, { onOpenPage("settings") }, inner)
-            NavTab.Intake -> IntakeScreen(db, goalStore, dayOffset, onDayChange, onEditMeal, onOpenHistory, inner, onOpenPending)
+            NavTab.Intake -> IntakeScreen(db, goalStore, dayOffset, onDayChange, onEditMeal, onOpenHistory, inner)
             NavTab.Burned -> BurnedScreen(db, dayOffset, onDayChange, inner)
             NavTab.Profile -> ProfileHub(onOpenPage, inner)
         }

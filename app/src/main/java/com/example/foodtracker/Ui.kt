@@ -146,7 +146,7 @@ fun StepsChartCard(days: List<DayEnergy>) {
     val color = MaterialTheme.colorScheme.secondary
     AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text("Steps", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Text("Daily steps", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(12.dp))
             Row(
                 Modifier.fillMaxWidth().height(90.dp),

@@ -41,44 +41,26 @@ private fun Hint(text: String, modifier: Modifier = Modifier, error: Boolean = f
 }
 
 @Composable
-private fun MiniGoal(label: String, value: Double, goal: Double, modifier: Modifier = Modifier) {
-    Column(modifier) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, style = MaterialTheme.typography.labelMedium)
-            Text(
-                "${value.f0()} / ${goal.f0()} g",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Spacer(Modifier.height(4.dp))
-        SlimBar((value / goal).toFloat(), value > goal)
-    }
-}
-
-@Composable
-private fun StepsCard(day: DayEnergy?, eaten: Double, body: Body?, dayOffset: Int) {
+private fun WalkCard(day: DayEnergy?, eaten: Double, body: Body?, dayOffset: Int) {
     val nf = remember { NumberFormat.getIntegerInstance() }
     val steps = day?.steps
     var needed: Long? = null
     if (day != null && body != null && dayOffset == 0 && eaten > 0 && day.balance > 0) {
         needed = ceil(day.balance / EnergyModel.kcalPerStep(body)).toLong()
     }
-    AppCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text("Steps", style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(steps?.let { nf.format(it) } ?: "—", style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold)
-                }
+    WidgetCard(if (dayOffset == 0) "Walk to balance" else "Steps that day") {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Column {
+                Text("Steps", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(steps?.let { nf.format(it) } ?: "—", style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold)
+            }
+            if (dayOffset == 0) {
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("To even out", style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("To go", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(
                         when {
-                            dayOffset != 0 || eaten <= 0 -> "—"
+                            eaten <= 0 -> "—"
                             needed == null -> "None"
                             needed > 15_000 -> "Over days"
                             else -> "≈ ${nf.format(needed)}"
@@ -89,16 +71,16 @@ private fun StepsCard(day: DayEnergy?, eaten: Double, body: Body?, dayOffset: In
                     )
                 }
             }
-            if (steps != null && needed != null && needed <= 15_000) {
-                Spacer(Modifier.height(10.dp))
-                SlimBar(steps.toFloat() / (steps + needed), false)
-            }
+        }
+        if (steps != null && needed != null && needed <= 15_000) {
+            Spacer(Modifier.height(10.dp))
+            SlimBar(steps.toFloat() / (steps + needed), false)
         }
     }
 }
 
 @Composable
-private fun WeightMiniCard(db: MealDb, body: Body?) {
+private fun WeightCardMini(db: MealDb, body: Body?) {
     val context = LocalContext.current
     var entries by remember { mutableStateOf(WeightDb(context).all()) }
     var pace by remember { mutableStateOf<Double?>(null) }
@@ -111,28 +93,18 @@ private fun WeightMiniCard(db: MealDb, body: Body?) {
         LogWeightDialog(onDismiss = { showLog = false }, onSaved = { entries = WeightDb(context).all() })
     }
 
-    AppCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(start = 16.dp, top = 8.dp, end = 8.dp, bottom = 12.dp)) {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Weight", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                TextButton(onClick = { showLog = true }) { Text("Log") }
-            }
-            if (entries.isEmpty()) {
-                Hint("No entries yet", Modifier.padding(bottom = 4.dp))
-            } else {
-                val values = remember(entries) { EnergyModel.trend(entries.takeLast(30).map { it.kg }) }
-                Row(Modifier.fillMaxWidth().padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(0.4f)) {
-                        Text("${entries.last().kg.f1()} kg", style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold)
-                        pace?.let { Pill("${"%+.1f".format(it)} kg/wk", Modifier.padding(top = 4.dp)) }
-                    }
-                    Sparkline(values, Modifier.weight(0.6f).height(56.dp))
+    WidgetCard("Your weight", trailing = { TextButton(onClick = { showLog = true }) { Text("Log") } }) {
+        if (entries.isEmpty()) {
+            Hint("No entries yet")
+        } else {
+            val values = remember(entries) { EnergyModel.trend(entries.takeLast(30).map { it.kg }) }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(0.4f)) {
+                    Text("${entries.last().kg.f1()} kg", style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold)
+                    pace?.let { Pill("${"%+.1f".format(it)} kg/wk", Modifier.padding(top = 4.dp)) }
                 }
+                Sparkline(values, Modifier.weight(0.6f).height(56.dp))
             }
         }
     }
@@ -173,8 +145,6 @@ fun HomeScreen(
 
     val day = week.firstOrNull()
     val goalKcal = budget?.kcalGoal?.takeIf { it > 0 } ?: goals.kcal
-    val sugarGoal = budget?.sugarGoal ?: goals.sugar
-    val fatGoal = budget?.fatGoal ?: goals.fat
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(inner),
@@ -184,17 +154,14 @@ fun HomeScreen(
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) { DateNavigator(dayOffset, onDayChange) }
-                IconButton(onClick = onOpenSettings) {
-                    Icon(Icons.Filled.Settings, contentDescription = "Settings")
-                }
+                IconButton(onClick = onOpenSettings) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
             }
         }
 
-        // Hero: intake against the goal, with the three numbers that matter
         item {
-            AppCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    CalorieRing(totals.kcal, goalKcal)
+            WidgetCard(if (dayOffset == 0) "Calories left today" else "Calories left, ${dayTitle(dayOffset)}") {
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    HeroRing(totals.kcal, goalKcal)
                     Spacer(Modifier.height(12.dp))
                     Row(Modifier.fillMaxWidth()) {
                         Metric("Eaten", nf.format(totals.kcal.toLong()), Modifier.weight(1f))
@@ -208,57 +175,26 @@ fun HomeScreen(
                     if (body == null) {
                         TextButton(onClick = { onOpenTab(NavTab.Profile) }) { Text("Add your details") }
                     }
-                    if (sugarGoal > 0 || fatGoal > 0) {
-                        Spacer(Modifier.height(12.dp))
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            if (sugarGoal > 0) MiniGoal("Sugar", totals.sugar, sugarGoal, Modifier.weight(1f))
-                            if (fatGoal > 0) MiniGoal("Fat", totals.fat, fatGoal, Modifier.weight(1f))
-                        }
-                    }
                     val b = budget
-                    if (features.isOn("budget") && b != null && b.kcalGoal > 0) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Expandable("Budget") {
-                                Hint("Base ${b.baseKcal.f0()}  ·  ${sgn(b.carryKcal)} carried")
-                                b.carryNote?.let { Hint(it) }
-                                if (b.agg7.days > 0) {
-                                    Hint(
-                                        "7 days: ${abs(b.agg7.underGoal).f0()} kcal " +
-                                            (if (b.agg7.underGoal >= 0) "under" else "over") + " goal"
-                                    )
-                                    Hint("Balance ${sgn(b.agg7.balance)} kcal  ·  ${"%+.2f".format(b.agg7.kg)} kg")
-                                }
-                                b.planMessage?.let { Hint(it, error = true) }
+                    if (features.isOn("home_budget") && b != null && b.kcalGoal > 0) {
+                        Expandable("Budget") {
+                            Hint("Base ${b.baseKcal.f0()}  ·  ${sgn(b.carryKcal)} carried")
+                            b.carryNote?.let { Hint(it) }
+                            if (b.agg7.days > 0) {
+                                Hint(
+                                    "7 days: ${abs(b.agg7.underGoal).f0()} kcal " +
+                                        (if (b.agg7.underGoal >= 0) "under" else "over") + " goal"
+                                )
                             }
+                            b.planMessage?.let { Hint(it, error = true) }
                         }
                     }
                 }
             }
         }
 
-        if (features.isOn("week") && week.isNotEmpty()) {
-            item {
-                AppCard(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp)) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("7 days", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                LegendDot(MaterialTheme.colorScheme.primary, "Eaten")
-                                LegendDot(MaterialTheme.colorScheme.secondary, "Burned")
-                            }
-                        }
-                        Spacer(Modifier.height(12.dp))
-                        EatenBurnedChart(week)
-                    }
-                }
-            }
-        }
-
-        if (features.isOn("steps")) item { StepsCard(day, totals.kcal, body, dayOffset) }
-        if (features.isOn("forecast")) item { WeightMiniCard(db, body) }
+        if (features.isOn("home_walk")) item { WalkCard(day, totals.kcal, body, dayOffset) }
+        if (features.isOn("home_week") && week.isNotEmpty()) item { BalanceTrendCard(week) }
+        if (features.isOn("home_weight")) item { WeightCardMini(db, body) }
     }
 }

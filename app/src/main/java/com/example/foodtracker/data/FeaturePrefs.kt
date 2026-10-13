@@ -12,13 +12,23 @@ class FeaturePrefs(context: Context) {
 
     companion object {
         val ALL = listOf(
-            Feature("budget", "Daily budget", "Goal with carry-over", "Home"),
-            Feature("week", "7-day chart", "Eaten vs burned", "Home"),
-            Feature("steps", "Steps", "Steps and walking target", "Home"),
-            Feature("forecast", "Weight trend", "Latest weight and pace", "Home"),
-            Feature("macros", "Macros", "Carbs, protein, fat", "Intake"),
-            Feature("water", "Water", "Daily tracker", "Intake"),
-            Feature("coach", "AI coach", "Daily summary", "Intake"),
+            Feature("home_budget", "Budget details", "Carry-over under the ring", "Home"),
+            Feature("home_walk", "Walk to balance", "Steps to even out the day", "Home"),
+            Feature("home_week", "This week's balance", "Running total", "Home"),
+            Feature("home_weight", "Your weight", "Latest weight and trend", "Home"),
+
+            Feature("in_sources", "Where your calories come from", "Carbs, protein, fat", "Intake"),
+            Feature("in_limits", "Staying within your limits", "Sugar and fat", "Intake"),
+            Feature("in_timing", "When you ate", "Calories by time of day", "Intake"),
+            Feature("in_top", "Biggest items", "Top foods today", "Intake"),
+            Feature("in_water", "Hydration", "Water tracker", "Intake"),
+            Feature("in_coach", "Coach note", "AI daily summary", "Intake"),
+
+            Feature("burn_split", "Where your burn comes from", "Resting and activity", "Burned"),
+            Feature("burn_week", "Eaten vs burned", "Last 7 days", "Burned"),
+            Feature("burn_steps", "Daily steps", "Last 7 days", "Burned"),
+            Feature("burn_outlook", "Where your weight is heading", "30-day outlook", "Burned"),
+
             Feature("diet", "Diet warnings", "Diets and allergies", "Smart")
         )
     }

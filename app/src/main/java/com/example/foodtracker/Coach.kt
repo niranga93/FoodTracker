@@ -169,7 +169,7 @@ fun CoachCard(db: MealDb, goalStore: GoalStore, dayOffset: Int) {
 
     AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text("AI coach", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Text("Coach note", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             val t = text
             when {

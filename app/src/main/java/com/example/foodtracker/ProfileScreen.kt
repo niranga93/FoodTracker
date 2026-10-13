@@ -471,6 +471,8 @@ fun ProfileScreen(goalStore: GoalStore, db: MealDb, inner: PaddingValues) {
         BackupCard(db, goalStore)
         Spacer(Modifier.height(12.dp))
         DataCard(db)
+        Spacer(Modifier.height(12.dp))
+        PrivacyCard()
         Spacer(Modifier.height(24.dp))
     }
 }

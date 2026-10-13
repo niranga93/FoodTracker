@@ -62,6 +62,10 @@ private fun dateKey(offset: Int): String {
     return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(c.time)
 }
 
+// The privacy policy says Health Connect data is not sent to Gemini. Keep this false
+// unless you also update the policy and the consent text.
+private const val SEND_HEALTH_CONNECT_DATA = false
+
 /** Only food, totals and context are sent. No name, weight, age or other profile details. */
 private suspend fun buildPrompt(context: Context, db: MealDb, goalStore: GoalStore, offset: Int): String {
     val meals = withContext(Dispatchers.IO) { loadDay(db, offset) }.sortedBy { it.timestamp }
@@ -77,7 +81,7 @@ private suspend fun buildPrompt(context: Context, db: MealDb, goalStore: GoalSto
     var energyLine: String? = null
     var stepsLine: String? = null
     if (body != null) {
-        val act = EnergyRepo.activityFor(context, listOf(offset))[offset]
+        val act = if (SEND_HEALTH_CONNECT_DATA) EnergyRepo.activityFor(context, listOf(offset))[offset] else null
         val raw = EnergyRepo.build(body, offset, t.kcal, act)
         val burned = raw.burned * CalibrationStore(context).factor
         energyLine = "Estimated calories burned: ${burned.f0()} kcal " +

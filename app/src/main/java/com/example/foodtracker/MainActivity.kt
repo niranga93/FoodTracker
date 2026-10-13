@@ -101,6 +101,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         NutritionLookup.init(applicationContext)
+
+        val action = intent?.action
+        if (action == "androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" ||
+            action == "android.intent.action.VIEW_PERMISSION_USAGE"
+        ) {
+            openPrivacyPolicy(this)
+        }
+
         setContent {
             AppTheme {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {

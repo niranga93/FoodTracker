@@ -202,6 +202,7 @@ sealed interface Screen {
     data class EditMeal(val id: Long) : Screen
     object History : Screen
     object Favorites : Screen
+    data class Page(val id: String) : Screen
 }
 
 enum class NavTab(val label: String, val icon: ImageVector) {
@@ -285,7 +286,8 @@ fun FoodApp(nav: NavViewModel = viewModel()) {
             onDescribe = { nav.open(Screen.Describe()) },
             onEditMeal = { nav.open(Screen.EditMeal(it)) },
             onOpenPending = { nav.open(Screen.ReviewPending(it)) },
-            onOpenHistory = { nav.open(Screen.History) }
+            onOpenHistory = { nav.open(Screen.History) },
+            onOpenPage = { nav.open(Screen.Page(it)) }
         )
         is Screen.History -> HistoryPage(
             db = db,
@@ -368,6 +370,12 @@ fun FoodApp(nav: NavViewModel = viewModel()) {
             onBack = { nav.open(Screen.Manual) },   // opened from Add manually
             onDone = nav::finishSave
         )
+        is Screen.Page -> PageScreen(
+            id = s.id,
+            db = db,
+            goalStore = goalStore,
+            onBack = nav::back
+        )
     }
 }
 
@@ -387,7 +395,8 @@ fun MainScaffold(
     onDescribe: () -> Unit,
     onEditMeal: (Long) -> Unit,
     onOpenPending: (Long) -> Unit,
-    onOpenHistory: () -> Unit
+    onOpenHistory: () -> Unit,
+    onOpenPage: (String) -> Unit
 ) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -413,10 +422,10 @@ fun MainScaffold(
         }
     ) { inner ->
         when (tab) {
-            NavTab.Home -> HomeScreen(db, goalStore, dayOffset, onDayChange, onTab, inner, onOpenPending)
+            NavTab.Home -> HomeScreen(db, goalStore, dayOffset, onDayChange, onTab, { onOpenPage("settings") }, inner)
             NavTab.Intake -> IntakeScreen(db, goalStore, dayOffset, onDayChange, onEditMeal, onOpenHistory, inner, onOpenPending)
             NavTab.Burned -> BurnedScreen(db, dayOffset, onDayChange, inner)
-            NavTab.Profile -> ProfileScreen(goalStore, db, inner)
+            NavTab.Profile -> ProfileHub(onOpenPage, inner)
         }
     }
 }

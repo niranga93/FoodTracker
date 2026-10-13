@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.foodtracker.backup.BackupService
+import com.example.foodtracker.data.FeaturePrefs
 import com.example.foodtracker.data.GoalStore
 import com.example.foodtracker.data.Meal
 import com.example.foodtracker.data.MealDb
@@ -43,6 +44,7 @@ fun IntakeScreen(
     onOpenPending: (Long) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val features = remember { FeaturePrefs(context) }
     var meals by remember(dayOffset) { mutableStateOf<List<Meal>>(emptyList()) }
     var loaded by remember(dayOffset) { mutableStateOf(false) }
     var reloads by remember { mutableStateOf(0) }   // bump to read the day again
@@ -111,18 +113,19 @@ fun IntakeScreen(
                     if (sugarGoal > 0) LabeledBar("Sugar", totals.sugar, sugarGoal, "g", 1)
                     if (fatGoal > 0) LabeledBar("Fat", totals.fat, fatGoal, "g", 1)
                     Spacer(Modifier.height(12.dp))
-                    Text(
-                        "Fiber ${totals.fiber.f1()} g  ·  Sat. fat ${totals.satFat.f1()} g  ·  Sodium ${totals.sodium.f0()} mg",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
+                    Expandable("More") {
+                        Text(
+                            "Fiber ${totals.fiber.f1()} g  ·  Sat. fat ${totals.satFat.f1()} g  ·  Sodium ${totals.sodium.f0()} mg",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
-        item { MacroCard(totals) }
-        item { WaterCard(dayOffset) }
-        item { CoachCard(db, goalStore, dayOffset) }
+        if (features.isOn("macros")) item { MacroCard(totals) }
+        if (features.isOn("water")) item { WaterCard(dayOffset) }
+        if (features.isOn("coach")) item { CoachCard(db, goalStore, dayOffset) }
         item {
             Text("Meals", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
@@ -170,13 +173,8 @@ fun IntakeScreen(
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            "Sugar ${t.sugar.f1()} g  ·  Fat ${t.fat.f1()} g",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Column(horizontalAlignment = Alignment.End) {

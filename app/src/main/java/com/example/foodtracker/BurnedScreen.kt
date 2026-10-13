@@ -25,7 +25,6 @@ import com.example.foodtracker.data.totals
 import com.example.foodtracker.energy.BurnSource
 import com.example.foodtracker.energy.CalibrationStore
 import com.example.foodtracker.energy.DayEnergy
-import com.example.foodtracker.energy.EnergyModel
 import com.example.foodtracker.energy.EnergyRepo
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -40,53 +39,6 @@ private fun LegendRow(color: Color, label: String, value: String) {
         Spacer(Modifier.width(8.dp))
         Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-    }
-}
-
-private fun dayInitial(offset: Int): String {
-    val c = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, offset) }
-    return SimpleDateFormat("EEE", Locale.getDefault()).format(c.time).take(1)
-}
-
-@Composable
-private fun WeekBars(days: List<DayEnergy>) {
-    val eatenColor = MaterialTheme.colorScheme.primary
-    val burnedColor = MaterialTheme.colorScheme.secondary
-    val maxV = (days.maxOfOrNull { maxOf(it.eaten, it.burned) } ?: 1.0).coerceAtLeast(1.0)
-    val ordered = days.reversed()          // oldest on the left
-    Row(
-        Modifier.fillMaxWidth().height(120.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.Bottom
-    ) {
-        ordered.forEach { d ->
-            Row(
-                Modifier.weight(1f).fillMaxHeight(),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                verticalAlignment = Alignment.Bottom
-            ) {
-                Box(
-                    Modifier.weight(1f).fillMaxHeight((d.eaten / maxV).toFloat().coerceIn(0.02f, 1f))
-                        .clip(RoundedCornerShape(3.dp)).background(eatenColor)
-                )
-                Box(
-                    Modifier.weight(1f).fillMaxHeight((d.burned / maxV).toFloat().coerceIn(0.02f, 1f))
-                        .clip(RoundedCornerShape(3.dp)).background(burnedColor)
-                )
-            }
-        }
-    }
-    Spacer(Modifier.height(4.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        ordered.forEach { d ->
-            Text(
-                dayInitial(d.offset),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f)
-            )
-        }
     }
 }
 
@@ -201,20 +153,6 @@ fun BurnedScreen(db: MealDb, dayOffset: Int, onDayChange: (Int) -> Unit, inner: 
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(top = 10.dp)
                             )
-                            if (factor != 1.0) {
-                                Text(
-                                    "Adjusted by ${"%+.0f".format((factor - 1) * 100)}% from your weigh-ins.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            if (dayOffset == 0) {
-                                Text(
-                                    "Today's total assumes no more activity.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
                         }
                     }
                 }
@@ -227,8 +165,7 @@ fun BurnedScreen(db: MealDb, dayOffset: Int, onDayChange: (Int) -> Unit, inner: 
                 item {
                     AppCard(Modifier.fillMaxWidth()) {
                         Text(
-                            "No step or calorie data from Health Connect. Connect it in Profile for real " +
-                                "steps and calories burned instead of estimates.",
+                            "Connect Health Connect in Connections for real data.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(16.dp)
@@ -250,30 +187,30 @@ fun BurnedScreen(db: MealDb, dayOffset: Int, onDayChange: (Int) -> Unit, inner: 
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         } else {
-                            WeekBars(week)
-                            LegendRow(MaterialTheme.colorScheme.primary, "Eaten", "")
-                            LegendRow(MaterialTheme.colorScheme.secondary, "Burned", "")
+                            EatenBurnedChart(week)
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
+                                LegendDot(MaterialTheme.colorScheme.primary, "Eaten")
+                                LegendDot(MaterialTheme.colorScheme.secondary, "Burned")
+                            }
                         }
                     }
                 }
             }
+
+            item { StepsChartCard(week) }
 
             item { PredictionCard(db) }
 
             item {
                 AppCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp)) {
-                        Text("How burn is estimated", style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold)
-                        Text(
-                            "Resting burn comes from your height, weight, age and sex (Mifflin-St Jeor), " +
-                                "plus a small allowance for digestion. Activity comes from Health Connect " +
-                                "when available, otherwise from your steps. Estimates can be off by 10-20% " +
-                                "or more; weigh-ins in History let the app adjust them to you.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 6.dp)
-                        )
+                        Expandable("How it's estimated") {
+                            Text(
+                                "Resting burn from your profile, plus Health Connect or step activity. Estimates can be off by 10 to 20%.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }

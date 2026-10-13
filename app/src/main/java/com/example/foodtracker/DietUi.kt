@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.foodtracker.data.FeaturePrefs
 import com.example.foodtracker.data.FoodItem
 import com.example.foodtracker.diet.ALLERGENS
 import com.example.foodtracker.diet.DIETS
@@ -86,6 +87,7 @@ fun DietCard() {
 @Composable
 fun DietWarnings(food: FoodItem, modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    if (!FeaturePrefs(context).isOn("diet")) return
     val settings = remember { DietStore(context).load() }
     val warnings = remember(food, settings) { DietRules.check(settings, food) }
     if (warnings.isNotEmpty()) {
@@ -105,6 +107,7 @@ fun DietWarnings(food: FoodItem, modifier: Modifier = Modifier) {
 @Composable
 fun DietBanner(items: List<FoodItem>) {
     val context = LocalContext.current
+    if (!FeaturePrefs(context).isOn("diet")) return
     val settings = remember { DietStore(context).load() }
     val flagged = remember(items, settings) {
         items.count { DietRules.check(settings, it).isNotEmpty() }

@@ -87,7 +87,8 @@ fun WeekCard(db: MealDb) {
     LaunchedEffect(Unit) {
         val offsets = (0 downTo -6).toList()
         val perDay = withContext(Dispatchers.IO) {
-            offsets.map { off -> off to loadDay(db, off).flatMap { it.items }.totals() }
+            val byDay = loadDays(db, offsets)
+            offsets.map { off -> off to byDay[off].orEmpty().flatMap { it.items }.totals() }
         }
         val logged = perDay.filter { it.second.kcal > 0 }
         if (logged.isNotEmpty()) {

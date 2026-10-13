@@ -13,12 +13,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -58,6 +60,7 @@ fun ManualEntryScreen(
     db: MealDb,
     initialOffset: Int,
     onBack: () -> Unit,
+    onFavorites: () -> Unit,
     onDone: (Int) -> Unit
 ) {
     val context = LocalContext.current
@@ -154,10 +157,15 @@ fun ManualEntryScreen(
 
     Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
         ScreenTopBar("Add manually", onBack)
-        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             FilterChip(selected = mode == 0, onClick = { mode = 0 }, label = { Text("Quick add") })
             FilterChip(selected = mode == 1, onClick = { mode = 1 }, label = { Text("Search food") })
             FilterChip(selected = mode == 2, onClick = { mode = 2 }, label = { Text("Recent") })
+            // Saved whole meals have their own screen
+            AssistChip(onClick = onFavorites, label = { Text("Favorite meals") })
         }
 
         when (mode) {

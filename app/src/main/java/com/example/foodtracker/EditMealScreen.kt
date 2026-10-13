@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -125,6 +126,7 @@ fun EditMealScreen(mealId: Long, db: MealDb, onBack: () -> Unit, onDone: (Int) -
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item { MealThumb(mealId, Modifier.fillMaxWidth().height(170.dp)) }
             item { DietBanner(items) }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

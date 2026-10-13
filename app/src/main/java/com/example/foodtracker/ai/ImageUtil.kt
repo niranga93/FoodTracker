@@ -13,13 +13,23 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import kotlin.math.max
 
 object ImageUtil {
-    /** Decodes the photo and applies its EXIF rotation so it is always upright. */
-    fun loadUpright(file: File, sampleSize: Int): Bitmap? {
+    /**
+     * Decodes the photo and applies its EXIF rotation so it is always upright.
+     * Subsamples while decoding so the longer side stays at least [minLongSide] px,
+     * which avoids decoding a full 12-50 MP image only to shrink it.
+     */
+    fun loadUpright(file: File, minLongSide: Int): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, bounds)
+        val longSide = max(bounds.outWidth, bounds.outHeight)
+        var sample = 1
+        while (longSide / (sample * 2) >= minLongSide) sample *= 2
         val bmp = BitmapFactory.decodeFile(
             file.absolutePath,
-            BitmapFactory.Options().apply { inSampleSize = sampleSize }
+            BitmapFactory.Options().apply { inSampleSize = sample }
         ) ?: return null
         val orientation = runCatching {
             ExifInterface(file.absolutePath)

@@ -6,7 +6,8 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import org.json.JSONArray
 
-class MealDb(context: Context) : SQLiteOpenHelper(context, "meals.db", null, 1) {
+class MealDb(context: Context) : SQLiteOpenHelper(context, "meals.db", null, 2) {
+    private val appContext = context.applicationContext
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -17,9 +18,12 @@ class MealDb(context: Context) : SQLiteOpenHelper(context, "meals.db", null, 1) 
                 items_json TEXT NOT NULL
             )"""
         )
+        db.execSQL(CREATE_TS_INDEX)
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) db.execSQL(CREATE_TS_INDEX)
+    }
 
     fun insert(
         description: String,
@@ -65,11 +69,13 @@ class MealDb(context: Context) : SQLiteOpenHelper(context, "meals.db", null, 1) 
 
     /** Distinct foods from your history, newest first. */
     fun recentItems(limit: Int = 200): List<FoodItem> =
-        all().flatMap { it.items }
+        query("SELECT id, ts, description, items_json FROM meals ORDER BY ts DESC LIMIT 500", emptyArray())
+            .flatMap { it.items }
             .distinctBy { it.name.trim().lowercase() + "|" + (it.matchedName ?: "") }
             .take(limit)
     fun delete(id: Long) {
         writableDatabase.delete("meals", "id = ?", arrayOf(id.toString()))
+        MealPhotos.delete(appContext, id)
     }
     fun all(): List<Meal> = between(0L, Long.MAX_VALUE)
 
@@ -100,13 +106,16 @@ class MealDb(context: Context) : SQLiteOpenHelper(context, "meals.db", null, 1) 
         }
     }
 
-    fun between(startMs: Long, endMs: Long): List<Meal> {
-        val out = mutableListOf<Meal>()
-        readableDatabase.rawQuery(
+    fun between(startMs: Long, endMs: Long): List<Meal> =
+        query(
             "SELECT id, ts, description, items_json FROM meals " +
                     "WHERE ts >= ? AND ts < ? ORDER BY ts DESC",
             arrayOf(startMs.toString(), endMs.toString())
-        ).use { c ->
+        )
+
+    private fun query(sql: String, args: Array<String>): List<Meal> {
+        val out = mutableListOf<Meal>()
+        readableDatabase.rawQuery(sql, args).use { c ->
             while (c.moveToNext()) {
                 val arr = JSONArray(c.getString(3))
                 val items = (0 until arr.length()).map { FoodItem.fromJson(arr.getJSONObject(it)) }
@@ -114,5 +123,9 @@ class MealDb(context: Context) : SQLiteOpenHelper(context, "meals.db", null, 1) 
             }
         }
         return out
+    }
+
+    private companion object {
+        const val CREATE_TS_INDEX = "CREATE INDEX IF NOT EXISTS idx_meals_ts ON meals(ts)"
     }
 }

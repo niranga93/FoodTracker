@@ -3,6 +3,7 @@ package com.example.foodtracker
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.foodtracker.data.FoodItem
+import com.example.foodtracker.nutrition.Analysis
 import com.example.foodtracker.nutrition.MealPipeline
 import com.example.foodtracker.nutrition.NutritionLookup
 import com.example.foodtracker.nutrition.OpenFoodFacts
@@ -49,20 +50,38 @@ data class ReviewUiState(
     val isLoading: Boolean = true,
     val description: String = "",
     val items: List<FoodItem> = emptyList(),
-    val error: String? = null
+    val error: String? = null,
+    val offline: Boolean = false     // photo not analyzed because there is no connection
 )
 
-class ReviewViewModel(private val file: File) : ViewModel() {
+/**
+ * Analyzes either a meal photo or a typed/spoken description (exactly one is set).
+ * [preloaded] is a finished analysis of a photo queued offline; [online] = false skips the attempt.
+ */
+class ReviewViewModel(
+    private val file: File?,
+    private val text: String?,
+    preloaded: Analysis? = null,
+    online: Boolean = true
+) : ViewModel() {
     private val _state = MutableStateFlow(ReviewUiState())
     val state: StateFlow<ReviewUiState> = _state.asStateFlow()
 
-    init { analyze() }
+    init {
+        when {
+            preloaded != null ->
+                _state.value = ReviewUiState(isLoading = false, description = preloaded.description, items = preloaded.items)
+            !online && file != null -> _state.value = ReviewUiState(isLoading = false, offline = true)
+            else -> analyze()
+        }
+    }
 
-    // Called once from init, and again from the Retry button (only shown when not loading)
+    // Called from init, and again from the Retry button (only shown when not loading)
     fun analyze() {
         viewModelScope.launch {
-            _state.update { it.copy(isLoading = true, error = null) }
-            MealPipeline.run(file).fold(
+            _state.update { it.copy(isLoading = true, error = null, offline = false) }
+            val result = if (file != null) MealPipeline.run(file) else MealPipeline.runText(text.orEmpty())
+            result.fold(
                 onSuccess = { res ->
                     _state.update {
                         it.copy(isLoading = false, description = res.description, items = res.items)

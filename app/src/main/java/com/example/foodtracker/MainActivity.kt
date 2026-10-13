@@ -6,7 +6,17 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.util.Log
+import android.util.Size
 import android.widget.Toast
+import android.content.Intent
+import android.os.Build
+import androidx.activity.viewModels
+import com.example.foodtracker.pending.AnalyzePendingWorker
+import com.example.foodtracker.pending.PendingMeal
+import com.example.foodtracker.pending.PendingMeals
+import com.example.foodtracker.pending.PendingStatus
+import com.example.foodtracker.pending.dayOffsetOf
+import com.example.foodtracker.pending.isOnline
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -21,6 +31,8 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.Crossfade
@@ -55,8 +67,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -68,11 +82,14 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import com.example.foodtracker.data.AI_ESTIMATE
 import com.example.foodtracker.data.FoodItem
 import com.example.foodtracker.data.GoalStore
 import com.example.foodtracker.data.Goals
 import com.example.foodtracker.data.Meal
 import com.example.foodtracker.data.MealDb
+import com.example.foodtracker.data.MealPhotos
+import com.example.foodtracker.data.PortionStore
 import com.example.foodtracker.data.Totals
 import com.example.foodtracker.data.totals
 import com.example.foodtracker.nutrition.MealPipeline
@@ -99,10 +116,17 @@ import com.example.foodtracker.backup.BackupService
 import androidx.compose.material.icons.filled.Person
 
 class MainActivity : ComponentActivity() {
+    // Same instance FoodApp gets from viewModel(), so notification taps can navigate
+    private val nav: NavViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         NutritionLookup.init(applicationContext)
+        PortionStore.init(applicationContext)
+        if (savedInstanceState == null) openPendingFrom(intent)
+        // Photos queued offline get another chance whenever the app starts
+        if (PendingMeals.all(this).any { it.status == PendingStatus.WAITING }) AnalyzePendingWorker.enqueue(this)
 
         val action = intent?.action
         if (action == "androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" ||
@@ -125,6 +149,18 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        openPendingFrom(intent)
+    }
+
+    /** Opens the review for a queued photo when started from its "ready to review" notification. */
+    private fun openPendingFrom(intent: Intent?) {
+        val id = intent?.getLongExtra(AnalyzePendingWorker.EXTRA_PENDING_ID, -1L) ?: -1L
+        if (id > 0) nav.open(Screen.ReviewPending(id))
     }
 }
 
@@ -157,6 +193,9 @@ sealed interface Screen {
     object Main : Screen
     object Camera : Screen
     data class Review(val file: File) : Screen
+    data class Describe(val initial: String = "") : Screen
+    data class ReviewText(val text: String) : Screen
+    data class ReviewPending(val id: Long) : Screen
     object Barcode : Screen
     data class Scanned(val code: String) : Screen
     object Manual : Screen
@@ -185,14 +224,6 @@ fun FoodApp(nav: NavViewModel = viewModel()) {
                     PackageManager.PERMISSION_GRANTED
         )
     }
-    val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasPermission = granted
-        if (granted) pending?.let { nav.open(it) }
-        pending = null
-    }
-
     val scope = rememberCoroutineScope()
     val galleryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -208,6 +239,24 @@ fun FoodApp(nav: NavViewModel = viewModel()) {
                 }
             }
         }
+    }
+
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasPermission = granted
+        when {
+            granted -> pending?.let { nav.open(it) }
+            // Without the camera, a photo can still come from the gallery
+            pending == Screen.Camera -> galleryLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        }
+        pending = null
+    }
+
+    fun pickFromGallery() {
+        galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     }
 
     fun go(target: Screen) {
@@ -231,15 +280,11 @@ fun FoodApp(nav: NavViewModel = viewModel()) {
             dayOffset = state.dayOffset,
             onDayChange = nav::setDay,
             onPhoto = { go(Screen.Camera) },
-            onGallery = {
-                galleryLauncher.launch(
-                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                )
-            },
             onScan = { go(Screen.Barcode) },
             onManual = { nav.open(Screen.Manual) },
-            onFavorites = { nav.open(Screen.Favorites) },
+            onDescribe = { nav.open(Screen.Describe()) },
             onEditMeal = { nav.open(Screen.EditMeal(it)) },
+            onOpenPending = { nav.open(Screen.ReviewPending(it)) },
             onOpenHistory = { nav.open(Screen.History) }
         )
         is Screen.History -> HistoryPage(
@@ -249,16 +294,50 @@ fun FoodApp(nav: NavViewModel = viewModel()) {
             onOpenDay = nav::openDay
         )
         is Screen.Camera -> CameraScreen(
-            onBack = nav::back
+            onBack = nav::back,
+            onGallery = ::pickFromGallery
         ) { nav.open(Screen.Review(it)) }
         is Screen.Review -> ReviewScreen(
             file = s.file,
+            text = null,
             db = db,
             initialOffset = state.dayOffset,
             onBack = nav::back,
             onRetake = { nav.open(Screen.Camera) },
             onDone = nav::finishSave
         )
+        is Screen.Describe -> DescribeMealScreen(
+            initial = s.initial,
+            onBack = nav::back,
+            onSubmit = { nav.open(Screen.ReviewText(it)) }
+        )
+        is Screen.ReviewText -> ReviewScreen(
+            file = null,
+            text = s.text,
+            db = db,
+            initialOffset = state.dayOffset,
+            onBack = nav::back,
+            onRetake = { nav.open(Screen.Describe(s.text)) },
+            onDone = nav::finishSave
+        )
+        is Screen.ReviewPending -> {
+            val p = remember(s.id) { PendingMeals.get(context, s.id) }
+            if (p == null) {
+                // Already saved or discarded (e.g. an old notification)
+                LaunchedEffect(s.id) { nav.back() }
+            } else {
+                ReviewScreen(
+                    file = p.photo,
+                    text = null,
+                    db = db,
+                    initialOffset = dayOffsetOf(p.mealTs),
+                    onBack = nav::back,
+                    onRetake = {},
+                    onDone = nav::finishSave,
+                    pending = p
+                )
+            }
+        }
         is Screen.Barcode -> BarcodeScreen(
             onBack = nav::back
         ) { nav.open(Screen.Scanned(it)) }
@@ -274,6 +353,7 @@ fun FoodApp(nav: NavViewModel = viewModel()) {
             db = db,
             initialOffset = state.dayOffset,
             onBack = nav::back,
+            onFavorites = { nav.open(Screen.Favorites) },
             onDone = nav::finishSave
         )
         is Screen.EditMeal -> EditMealScreen(
@@ -285,7 +365,7 @@ fun FoodApp(nav: NavViewModel = viewModel()) {
         is Screen.Favorites -> FavoriteMealsScreen(
             db = db,
             initialOffset = state.dayOffset,
-            onBack = nav::back,
+            onBack = { nav.open(Screen.Manual) },   // opened from Add manually
             onDone = nav::finishSave
         )
     }
@@ -302,11 +382,11 @@ fun MainScaffold(
     dayOffset: Int,
     onDayChange: (Int) -> Unit,
     onPhoto: () -> Unit,
-    onGallery: () -> Unit,
     onScan: () -> Unit,
     onManual: () -> Unit,
-    onFavorites: () -> Unit,
+    onDescribe: () -> Unit,
     onEditMeal: (Long) -> Unit,
+    onOpenPending: (Long) -> Unit,
     onOpenHistory: () -> Unit
 ) {
     Scaffold(
@@ -329,12 +409,12 @@ fun MainScaffold(
             }
         },
         floatingActionButton = {
-            if (tab == NavTab.Home || tab == NavTab.Intake) AddFab(onPhoto, onGallery, onScan, onManual, onFavorites)
+            if (tab == NavTab.Home || tab == NavTab.Intake) AddFab(onPhoto, onDescribe, onScan, onManual)
         }
     ) { inner ->
         when (tab) {
-            NavTab.Home -> HomeScreen(db, goalStore, dayOffset, onDayChange, onTab, inner)
-            NavTab.Intake -> IntakeScreen(db, goalStore, dayOffset, onDayChange, onEditMeal, onOpenHistory, inner)
+            NavTab.Home -> HomeScreen(db, goalStore, dayOffset, onDayChange, onTab, inner, onOpenPending)
+            NavTab.Intake -> IntakeScreen(db, goalStore, dayOffset, onDayChange, onEditMeal, onOpenHistory, inner, onOpenPending)
             NavTab.Burned -> BurnedScreen(db, dayOffset, onDayChange, inner)
             NavTab.Profile -> ProfileScreen(goalStore, db, inner)
         }
@@ -344,10 +424,9 @@ fun MainScaffold(
 @Composable
 fun AddFab(
     onPhoto: () -> Unit,
-    onGallery: () -> Unit,
+    onDescribe: () -> Unit,
     onScan: () -> Unit,
-    onManual: () -> Unit,
-    onFavorites: () -> Unit
+    onManual: () -> Unit
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
@@ -359,12 +438,31 @@ fun AddFab(
             contentColor = MaterialTheme.colorScheme.onPrimary
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(text = { Text("Take a photo") }, onClick = { open = false; onPhoto() })
-            DropdownMenuItem(text = { Text("Photo from gallery") }, onClick = { open = false; onGallery() })
-            DropdownMenuItem(text = { Text("Scan a barcode") }, onClick = { open = false; onScan() })
-            DropdownMenuItem(text = { Text("Add manually") }, onClick = { open = false; onManual() })
-            DropdownMenuItem(text = { Text("Favorite meals") }, onClick = { open = false; onFavorites() })
+            DropdownMenuItem(
+                text = { MenuLabel("Photo", "Camera, or pick from gallery") },
+                onClick = { open = false; onPhoto() }
+            )
+            DropdownMenuItem(
+                text = { MenuLabel("Describe or speak", "Type or say what you ate") },
+                onClick = { open = false; onDescribe() }
+            )
+            DropdownMenuItem(
+                text = { MenuLabel("Scan a barcode", "Packaged food") },
+                onClick = { open = false; onScan() }
+            )
+            DropdownMenuItem(
+                text = { MenuLabel("Add manually", "Search, recent, quick add, favorite meals") },
+                onClick = { open = false; onManual() }
+            )
         }
+    }
+}
+
+@Composable
+private fun MenuLabel(title: String, hint: String) {
+    Column(Modifier.padding(vertical = 4.dp)) {
+        Text(title, style = MaterialTheme.typography.bodyLarge)
+        Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -378,8 +476,12 @@ fun HistoryScreen(
     onOpenDay: (Int) -> Unit
 ) {
     val goals = remember { goalStore.load() }
-    val days = remember {
-        (0 downTo -13).map { off -> off to loadDay(db, off).flatMap { it.items } }
+    val offsets = remember { (0 downTo -13).toList() }
+    val days by produceState(offsets.map { it to emptyList<FoodItem>() }) {
+        value = withContext(Dispatchers.IO) {
+            val byDay = loadDays(db, offsets)
+            offsets.map { off -> off to byDay[off].orEmpty().flatMap { it.items } }
+        }
     }
     val logged = days.filter { it.second.isNotEmpty() }
     val avgKcal = if (logged.isEmpty()) 0.0 else logged.map { it.second.totals().kcal }.average()
@@ -395,6 +497,7 @@ fun HistoryScreen(
             Text("History", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         }
         item { WeekCard(db) }
+        item { WeeklyReviewCard(db, goalStore) }
         item { PredictionCard(db) }
         item { WeightCard() }
         item {
@@ -479,10 +582,25 @@ fun HistoryScreen(
 // ---------------------------------------------------------------- capture flows
 
 @Composable
-fun CameraScreen(onBack: () -> Unit, onCaptured: (File) -> Unit) {
+fun CameraScreen(onBack: () -> Unit, onGallery: () -> Unit, onCaptured: (File) -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = context as LifecycleOwner
-    val imageCapture = remember { ImageCapture.Builder().build() }
+    // The photo is shrunk to 1280 px before analysis, so a full-resolution capture only adds delay
+    val imageCapture = remember {
+        ImageCapture.Builder()
+            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+            .setResolutionSelector(
+                ResolutionSelector.Builder()
+                    .setResolutionStrategy(
+                        ResolutionStrategy(
+                            Size(1920, 1440),
+                            ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+                        )
+                    )
+                    .build()
+            )
+            .build()
+    }
     val providerRef = remember { arrayOfNulls<ProcessCameraProvider>(1) }
     DisposableEffect(Unit) {
         onDispose { providerRef[0]?.unbindAll() }
@@ -551,7 +669,32 @@ fun CameraScreen(onBack: () -> Unit, onCaptured: (File) -> Unit) {
                     )
                 }
         )
+        // Gallery, level with the shutter (shutter centre is 72 dp above the bottom)
+        IconButton(
+            onClick = onGallery,
+            modifier = Modifier.align(Alignment.BottomStart)
+                .navigationBarsPadding()
+                .padding(start = 40.dp, bottom = 46.dp)
+                .size(52.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.45f))
+        ) {
+            Icon(GalleryIcon, contentDescription = "Pick from gallery", tint = Color.White)
+        }
     }
+}
+
+// Material "Image" icon; the core icon set used by this app doesn't include it
+private val GalleryIcon: ImageVector by lazy {
+    ImageVector.Builder("Gallery", 24.dp, 24.dp, 24f, 24f)
+        .addPath(
+            pathData = addPathNodes(
+                "M21,19V5c0,-1.1 -0.9,-2 -2,-2H5c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h14" +
+                    "c1.1,0 2,-0.9 2,-2zM8.5,13.5l2.5,3.01L14.5,12l4.5,6H5l3.5,-4.5z"
+            ),
+            fill = SolidColor(Color.Black)
+        )
+        .build()
 }
 
 @androidx.annotation.OptIn(ExperimentalGetImage::class)
@@ -644,24 +787,47 @@ fun BarcodeScreen(onBack: () -> Unit, onScanned: (String) -> Unit) {
 
 @Composable
 fun ReviewScreen(
-    file: File,
+    file: File?,            // a meal photo, or
+    text: String?,          // a typed / spoken description
     db: MealDb,
     initialOffset: Int,
     onBack: () -> Unit,
     onRetake: () -> Unit,
-    onDone: (Int) -> Unit
+    onDone: (Int) -> Unit,
+    pending: PendingMeal? = null   // a photo queued offline; [file] is its photo
 ) {
-    // One ViewModel per photo, so a retake starts a fresh analysis
+    // One ViewModel per photo or description, so a retake starts a fresh analysis
     val context = LocalContext.current
     val vm: ReviewViewModel = viewModel(
-        key = file.absolutePath,
-        factory = viewModelFactory { initializer { ReviewViewModel(file) } }
+        key = pending?.let { "pending-${it.id}" } ?: file?.absolutePath ?: "text-$text",
+        factory = viewModelFactory {
+            initializer { ReviewViewModel(file, text, pending?.analysis, isOnline(context)) }
+        }
     )
     val state by vm.state.collectAsStateWithLifecycle()
     var logOffset by rememberSaveable { mutableStateOf(initialOffset) }
     var pickIndex by remember { mutableStateOf<Int?>(null) }
-    val bitmap = remember(file) {
-        ImageUtil.loadUpright(file, 4) ?: Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+
+    // Offline: keep the photo and analyze it in the background once connected
+    fun queueNow() {
+        if (file == null) return
+        PendingMeals.add(context, file, timestampForOffset(logOffset))
+        AnalyzePendingWorker.enqueue(context)
+        Toast.makeText(context, "Saved. You'll be notified when it's ready to review.", Toast.LENGTH_LONG).show()
+        onBack()
+    }
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { queueNow() }   // queue either way; without permission the in-app card still shows it
+    fun queueForLater() {
+        val needsAsk = Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        if (needsAsk) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else queueNow()
+    }
+    val canQueue = file != null && pending == null
+    val bitmap by produceState<Bitmap?>(null, file) {
+        if (file != null) value = withContext(Dispatchers.IO) { ImageUtil.loadUpright(file, 800) }
     }
 
     pickIndex?.let { idx ->
@@ -680,22 +846,56 @@ fun ReviewScreen(
 
     Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
         ScreenTopBar("Review meal", onBack)
-        Image(
-            bitmap = bitmap.asImageBitmap(),
-            contentDescription = "Meal photo",
-            modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .fillMaxWidth()
-                .height(170.dp)
-                .clip(RoundedCornerShape(20.dp)),
-            contentScale = ContentScale.Crop
-        )
+        if (file != null) {
+            Box(
+                Modifier
+                    .padding(horizontal = 16.dp)
+                    .fillMaxWidth()
+                    .height(170.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                bitmap?.let {
+                    Image(
+                        bitmap = it.asImageBitmap(),
+                        contentDescription = "Meal photo",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+            }
+        } else if (text != null) {
+            Text(
+                "“$text”",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+        }
         when {
             state.isLoading -> AnalyzingView(
                 "Analyzing your meal…",
                 "Identifying foods and looking up nutrition",
                 Modifier.weight(1f).fillMaxWidth()
             )
+            state.offline -> Column(Modifier.weight(1f).padding(16.dp)) {
+                AppCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("You're offline", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (canQueue) "Save this photo and it will be analyzed automatically when you're " +
+                                "back online. You'll get a notification when it's ready to review."
+                            else "This photo is queued and will be analyzed automatically when you're back online.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
+                }
+                Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (canQueue) Button(onClick = ::queueForLater) { Text("Analyze when online") }
+                    OutlinedButton(onClick = { vm.analyze() }) { Text("Try now") }
+                }
+            }
             state.error != null -> Column(Modifier.weight(1f).padding(16.dp)) {
                 AppCard(Modifier.fillMaxWidth()) {
                     Text(
@@ -704,8 +904,9 @@ fun ReviewScreen(
                         color = MaterialTheme.colorScheme.error
                     )
                 }
-                Button(onClick = { vm.analyze() }, modifier = Modifier.padding(top = 12.dp)) {
-                    Text("Try again")
+                Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { vm.analyze() }) { Text("Try again") }
+                    if (canQueue) OutlinedButton(onClick = ::queueForLater) { Text("Analyze later") }
                 }
             }
             else -> LazyColumn(
@@ -736,11 +937,29 @@ fun ReviewScreen(
         ActionBar(
             logOffset = logOffset,
             onOffset = { logOffset = it },
-            secondaryLabel = "Retake",
-            onSecondary = onRetake,
-            saveEnabled = !state.isLoading && state.error == null && state.items.isNotEmpty(),
+            secondaryLabel = when {
+                pending != null -> "Discard"
+                file != null -> "Retake"
+                else -> "Edit text"
+            },
+            onSecondary = {
+                if (pending != null) {
+                    PendingMeals.remove(context, pending.id)
+                    onBack()
+                } else onRetake()
+            },
+            saveEnabled = !state.isLoading && state.error == null && !state.offline && state.items.isNotEmpty(),
             onSave = {
-                db.insert(state.description, state.items, timestampForOffset(logOffset))
+                // A queued photo keeps the time it was taken, moved to whichever day is picked
+                val ts = if (pending != null) shiftDays(pending.mealTs, logOffset - initialOffset)
+                else timestampForOffset(logOffset)
+                val id = db.insert(state.description, state.items, ts)
+                if (pending != null) PendingMeals.remove(context, pending.id, keepPhoto = true)
+                if (file != null) {
+                    // Learn from how the kept grams compare with the AI's photo guess
+                    state.items.forEach { f -> f.estimate?.let { PortionStore.record(f.name, it.aiGrams, f.grams) } }
+                    if (id > 0) MealPhotos.saveAsync(context, id, file)
+                }
                 BackupService.autoBackup(context)
                 onDone(logOffset)
             }
@@ -878,11 +1097,17 @@ fun ItemRow(
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        food.matchedName?.let { "USDA: $it" }
-                            ?: "No USDA match - nutrition not counted",
+                        when (food.matchedName) {
+                            null -> "No USDA match - nutrition not counted"
+                            AI_ESTIMATE -> "No USDA match - using the AI's nutrition estimate"
+                            else -> "USDA: ${food.matchedName}"
+                        },
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (food.matchedName == null) MaterialTheme.colorScheme.error
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = when (food.matchedName) {
+                            null -> MaterialTheme.colorScheme.error
+                            AI_ESTIMATE -> MaterialTheme.colorScheme.tertiary
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -926,6 +1151,24 @@ fun ItemRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            }
+            food.estimate?.let { e ->
+                val unsure = e.confidence == "low"
+                val range = if (e.highGrams > e.lowGrams) "${e.lowGrams.f0()}-${e.highGrams.f0()} g" else null
+                Text(
+                    buildString {
+                        append(if (unsure) "AI wasn't sure about this one" else "AI confidence: ${e.confidence}")
+                        range?.let { append(" · likely $it") }
+                        if (e.preparation.isNotBlank()) append(" · ${e.preparation}")
+                        e.learnedFactor?.let {
+                            append(" · adjusted from ${e.aiGrams.f0()} g to match your usual portion")
+                        }
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (unsure) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
             }
         }
     }

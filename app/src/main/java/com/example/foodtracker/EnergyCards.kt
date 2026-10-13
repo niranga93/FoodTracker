@@ -122,10 +122,9 @@ fun PredictionCard(db: MealDb) {
         if (body != null) {
             val offsets = (-1 downTo -28).toList()          // completed days, newest first
             val acts = EnergyRepo.activityFor(context, offsets)
+            val byDay = withContext(Dispatchers.IO) { loadDays(db, offsets) }
             val raw = offsets.map { off ->
-                val eaten = withContext(Dispatchers.IO) {
-                    loadDay(db, off).flatMap { it.items }.totals().kcal
-                }
+                val eaten = byDay[off].orEmpty().flatMap { it.items }.totals().kcal
                 EnergyRepo.build(body, off, eaten, acts[off])
             }
             val now = System.currentTimeMillis()

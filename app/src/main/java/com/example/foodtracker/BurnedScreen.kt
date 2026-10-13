@@ -8,6 +8,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -100,7 +102,7 @@ fun BurnedScreen(db: MealDb, dayOffset: Int, onDayChange: (Int) -> Unit, inner: 
     LaunchedEffect(dayOffset) {
         if (body != null) {
             val act = EnergyRepo.activityFor(context, listOf(dayOffset))[dayOffset]
-            val eaten = loadDay(db, dayOffset).flatMap { it.items }.totals().kcal
+            val eaten = withContext(Dispatchers.IO) { loadDay(db, dayOffset).flatMap { it.items }.totals().kcal }
             val raw = EnergyRepo.build(body, dayOffset, eaten, act)
             val burned = raw.burned * factor
             val resting = (raw.resting * factor).coerceAtMost(burned)
@@ -116,8 +118,9 @@ fun BurnedScreen(db: MealDb, dayOffset: Int, onDayChange: (Int) -> Unit, inner: 
         if (body != null) {
             val offsets = (0 downTo -6).toList()
             val acts = EnergyRepo.activityFor(context, offsets)
+            val byDay = withContext(Dispatchers.IO) { loadDays(db, offsets) }
             week = offsets.map { off ->
-                val eaten = loadDay(db, off).flatMap { it.items }.totals().kcal
+                val eaten = byDay[off].orEmpty().flatMap { it.items }.totals().kcal
                 val raw = EnergyRepo.build(body, off, eaten, acts[off])
                 raw.copy(burned = raw.burned * factor)
             }

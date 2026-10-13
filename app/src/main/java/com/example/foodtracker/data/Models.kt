@@ -10,7 +10,8 @@ data class FoodItem(
     val kcal100: Double, val protein100: Double, val fat100: Double,
     val satFat100: Double, val carbs100: Double, val sugar100: Double,
     val fiber100: Double, val sodium100: Double,
-    val tags: List<String> = emptyList()   // allergen / diet tags such as "milk", "gluten", "meat"
+    val tags: List<String> = emptyList(),  // allergen / diet tags such as "milk", "gluten", "meat"
+    val estimate: PortionEstimate? = null  // photo review only; not saved
 ) {
     val kcal get() = kcal100 * grams / 100
     val protein get() = protein100 * grams / 100
@@ -49,6 +50,19 @@ data class FoodItem(
         )
     }
 }
+
+/** What the AI reported about a portion: its likely range and how sure it was. */
+data class PortionEstimate(
+    val lowGrams: Double,
+    val highGrams: Double,
+    val confidence: String,     // "low", "medium" or "high"
+    val preparation: String,
+    val aiGrams: Double,                    // the AI's own guess, before any learned adjustment
+    val learnedFactor: Double? = null       // set when your past portions adjusted the guess
+)
+
+/** matchedName for items whose nutrition is the AI's own estimate (no database match). */
+const val AI_ESTIMATE = "AI estimate"
 
 data class Totals(
     val kcal: Double, val protein: Double, val fat: Double, val satFat: Double,

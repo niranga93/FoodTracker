@@ -13,6 +13,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -37,14 +39,22 @@ fun IntakeScreen(
     onDayChange: (Int) -> Unit,
     onEditMeal: (Long) -> Unit,
     onOpenHistory: () -> Unit,
-    inner: PaddingValues
+    inner: PaddingValues,
+    onOpenPending: (Long) -> Unit = {}
 ) {
     val context = LocalContext.current
-    var meals by remember(dayOffset) { mutableStateOf(loadDay(db, dayOffset)) }
+    var meals by remember(dayOffset) { mutableStateOf<List<Meal>>(emptyList()) }
+    var loaded by remember(dayOffset) { mutableStateOf(false) }
+    var reloads by remember { mutableStateOf(0) }   // bump to read the day again
     val goals = remember { goalStore.load() }
     var toDelete by remember { mutableStateOf<Meal?>(null) }
     val totals = remember(meals) { meals.flatMap { it.items }.totals() }
     val timeFmt = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
+
+    LaunchedEffect(dayOffset, reloads) {
+        meals = withContext(Dispatchers.IO) { loadDay(db, dayOffset) }
+        loaded = true
+    }
 
     toDelete?.let { meal ->
         AlertDialog(
@@ -55,7 +65,7 @@ fun IntakeScreen(
                 TextButton(onClick = {
                     db.delete(meal.id)
                     BackupService.autoBackup(context)
-                    meals = loadDay(db, dayOffset)
+                    reloads++
                     toDelete = null
                 }) { Text("Delete") }
             },
@@ -79,6 +89,7 @@ fun IntakeScreen(
             }
         }
         item { DateNavigator(dayOffset, onDayChange) }
+        item { PendingMealsCard(onOpenPending) }
         item {
             AppCard(Modifier.fillMaxWidth()) {
                 Column(
@@ -111,7 +122,7 @@ fun IntakeScreen(
         item {
             Text("Meals", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
-        if (meals.isEmpty()) {
+        if (loaded && meals.isEmpty()) {
             item {
                 AppCard(Modifier.fillMaxWidth()) {
                     Column(
@@ -134,6 +145,7 @@ fun IntakeScreen(
             val t = meal.totals
             AppCard(Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(start = 16.dp, top = 14.dp, bottom = 10.dp, end = 4.dp)) {
+                    MealThumb(meal.id, Modifier.padding(end = 12.dp).size(56.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
                             timeFmt.format(Date(meal.timestamp)).uppercase(),
@@ -181,7 +193,7 @@ fun IntakeScreen(
                             db = db,
                             onEdit = { onEditMeal(meal.id) },
                             onDelete = { toDelete = meal },
-                            onLoggedToday = { if (dayOffset != 0) onDayChange(0) else meals = loadDay(db, 0) }
+                            onLoggedToday = { if (dayOffset != 0) onDayChange(0) else reloads++ }
                         )
                     }
                 }

@@ -44,15 +44,20 @@ import java.util.Locale
 fun Double.f0(): String = "%.0f".format(this)
 fun Double.f1(): String = "%.1f".format(this)
 
-fun loadDay(db: MealDb, offset: Int): List<Meal> {
-    val c = Calendar.getInstance().apply {
-        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        add(Calendar.DAY_OF_YEAR, offset)
-    }
-    val start = c.timeInMillis
-    c.add(Calendar.DAY_OF_YEAR, 1)
-    return db.between(start, c.timeInMillis)
+private fun dayStart(offset: Int): Long = Calendar.getInstance().apply {
+    set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+    set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+    add(Calendar.DAY_OF_YEAR, offset)
+}.timeInMillis
+
+fun loadDay(db: MealDb, offset: Int): List<Meal> = db.between(dayStart(offset), dayStart(offset + 1))
+
+/** Meals for each day offset, read with a single query. Days without meals map to an empty list. */
+fun loadDays(db: MealDb, offsets: List<Int>): Map<Int, List<Meal>> {
+    if (offsets.isEmpty()) return emptyMap()
+    val starts = offsets.associateWith { dayStart(it) to dayStart(it + 1) }
+    val meals = db.between(starts.values.minOf { it.first }, starts.values.maxOf { it.second })
+    return starts.mapValues { (_, range) -> meals.filter { it.timestamp >= range.first && it.timestamp < range.second } }
 }
 
 fun dayTitle(offset: Int): String = when (offset) {

@@ -7,6 +7,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -80,17 +82,19 @@ fun HomeScreen(
     dayOffset: Int,
     onDayChange: (Int) -> Unit,
     onOpenTab: (NavTab) -> Unit,
-    inner: PaddingValues
+    inner: PaddingValues,
+    onOpenPending: (Long) -> Unit = {}
 ) {
     val context = LocalContext.current
     val profile = remember { ProfileStore(context).load() }
     val (body, reason) = remember { EnergyRepo.body(profile) }
     val goals = remember { goalStore.load() }
-    val eaten = remember(dayOffset) { loadDay(db, dayOffset).flatMap { it.items }.totals().kcal }
+    var eaten by remember(dayOffset) { mutableStateOf(0.0) }
     var day by remember(dayOffset) { mutableStateOf<DayEnergy?>(null) }
     val nf = remember { NumberFormat.getIntegerInstance() }
 
     LaunchedEffect(dayOffset) {
+        eaten = withContext(Dispatchers.IO) { loadDay(db, dayOffset).flatMap { it.items }.totals().kcal }
         if (body != null) {
             val act = EnergyRepo.activityFor(context, listOf(dayOffset))[dayOffset]
             val raw = EnergyRepo.build(body, dayOffset, eaten, act)
@@ -116,6 +120,7 @@ fun HomeScreen(
             }
         }
         item { DateNavigator(dayOffset, onDayChange) }
+        item { PendingMealsCard(onOpenPending) }
 
         // ---- intake vs burned and the balance
         item {

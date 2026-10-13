@@ -72,7 +72,6 @@ private suspend fun buildPrompt(context: Context, db: MealDb, goalStore: GoalSto
     val t = meals.flatMap { it.items }.totals()
     val goals = goalStore.load()
     val water = WaterStore(context)
-    val diet = DietStore(context).load()
     val timeFmt = SimpleDateFormat("HH:mm", Locale.US)
     val nf = NumberFormat.getIntegerInstance(Locale.US)
 
@@ -113,14 +112,7 @@ private suspend fun buildPrompt(context: Context, db: MealDb, goalStore: GoalSto
         appendLine("Water: ${nf.format(water.get(offset))} ml (goal ${nf.format(water.goalMl)} ml)")
         energyLine?.let { appendLine(it) }
         stepsLine?.let { appendLine(it) }
-        if (!diet.isEmpty()) {
-            val labels = ALLERGENS.filter { it.first in diet.allergens }.map { it.second }
-            appendLine(
-                "Diet: ${diet.diets.joinToString(", ").ifBlank { "none stated" }}. " +
-                    "Allergies: ${labels.joinToString(", ").ifBlank { "none stated" }}. " +
-                    "Also avoids: ${diet.other.joinToString(", ").ifBlank { "nothing stated" }}."
-            )
-        }
+        dietLine(context)?.let { appendLine(it) }
     }
 }
 
@@ -135,7 +127,10 @@ fun CoachCard(db: MealDb, goalStore: GoalStore, dayOffset: Int) {
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var askConsent by remember { mutableStateOf(false) }
-    val hasMeals = remember(dayOffset) { loadDay(db, dayOffset).isNotEmpty() }
+    var hasMeals by remember(dayOffset) { mutableStateOf(false) }
+    LaunchedEffect(dayOffset) {
+        hasMeals = withContext(Dispatchers.IO) { loadDay(db, dayOffset).isNotEmpty() }
+    }
     val timeFmt = remember { SimpleDateFormat("d MMM, h:mm a", Locale.getDefault()) }
 
     fun generate() {
@@ -160,25 +155,15 @@ fun CoachCard(db: MealDb, goalStore: GoalStore, dayOffset: Int) {
     }
 
     if (askConsent) {
-        AlertDialog(
-            onDismissRequest = { askConsent = false },
-            title = { Text("Send this day to Gemini?") },
-            text = {
-                Text(
-                    "The AI coach sends the day's foods, amounts and totals, your goals, water, estimated " +
-                        "calories burned and diet preferences to Google's Gemini API to write the summary. " +
-                        "Your name, weight, age and other profile details are not sent. On the free tier, " +
-                        "Google may use this data to improve its products and humans may review it."
-                )
+        CoachConsentDialog(
+            "Send this day to Gemini?",
+            "the day's foods, amounts and totals, your goals, water, estimated calories burned and diet preferences",
+            onAgree = {
+                prefs.consented = true
+                askConsent = false
+                generate()
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    prefs.consented = true
-                    askConsent = false
-                    generate()
-                }) { Text("Agree and continue") }
-            },
-            dismissButton = { TextButton(onClick = { askConsent = false }) { Text("Cancel") } }
+            onDismiss = { askConsent = false }
         )
     }
 
@@ -217,6 +202,204 @@ fun CoachCard(db: MealDb, goalStore: GoalStore, dayOffset: Int) {
                     )
                     Button(onClick = { request() }, modifier = Modifier.padding(top = 8.dp)) {
                         Text("Get summary")
+                    }
+                }
+            }
+            error?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+        }
+    }
+}
+
+private fun dietLine(context: Context): String? {
+    val diet = DietStore(context).load()
+    if (diet.isEmpty()) return null
+    val labels = ALLERGENS.filter { it.first in diet.allergens }.map { it.second }
+    return "Diet: ${diet.diets.joinToString(", ").ifBlank { "none stated" }}. " +
+        "Allergies: ${labels.joinToString(", ").ifBlank { "none stated" }}. " +
+        "Also avoids: ${diet.other.joinToString(", ").ifBlank { "nothing stated" }}."
+}
+
+@Composable
+private fun CoachConsentDialog(title: String, whatIsSent: String, onAgree: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Text(
+                "The AI coach sends $whatIsSent to Google's Gemini API to write the summary. " +
+                    "Your name, weight, age and other profile details are not sent. On the free tier, " +
+                    "Google may use this data to improve its products and humans may review it."
+            )
+        },
+        confirmButton = { TextButton(onClick = onAgree) { Text("Agree and continue") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+// ---------------------------------------------------------------- weekly review
+
+private const val WEEKLY_SYSTEM = """
+You are a supportive nutrition coach inside a food-logging app. You receive the user's food log for
+the last 7 days: per day the meals with times, foods and amounts, the day's totals and water.
+Write plain text only (no markdown), at most 170 words, in this shape:
+This week: 2 sentences summing up the week.
+Patterns: two or three short lines starting with a dash. Look for real patterns across days, for
+example meal timing, weekdays versus weekend, late eating, protein or fiber, sugar, water, repeated
+foods. Mention specific days or foods so it feels personal.
+Try this week: one specific, practical suggestion.
+Rules:
+- Be warm, neutral and encouraging. Never shame food choices, weight or body size.
+- Give general nutrition information only. Do not diagnose or give medical advice.
+- Never suggest skipping meals, eating very little, or compensating for food with exercise.
+- Days marked "nothing logged" are gaps in the log, not fasting. Very low days are probably incomplete logs.
+- If intake looks consistently very low, suggest talking to a doctor or dietitian.
+- Respect the user's diet and allergies: never suggest anything that conflicts with them.
+- The user's daily maximums are context only. Do not set new targets.
+"""
+
+private const val WEEK_DAYS = 7
+private const val MIN_DAYS_FOR_WEEKLY = 3
+
+/** Only food, totals, water, goals and diet are sent. No profile or Health Connect data. */
+private fun buildWeekPrompt(context: Context, db: MealDb, goalStore: GoalStore): String {
+    val offsets = (-WEEK_DAYS..-1).toList()                 // the last 7 complete days, oldest first
+    val byDay = loadDays(db, offsets)
+    val goals = goalStore.load()
+    val water = WaterStore(context)
+    val dayFmt = SimpleDateFormat("EEE d MMM", Locale.US)
+    val timeFmt = SimpleDateFormat("HH:mm", Locale.US)
+    val nf = NumberFormat.getIntegerInstance(Locale.US)
+
+    return buildString {
+        offsets.forEach { off ->
+            val date = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, off) }.time
+            val meals = byDay[off].orEmpty().sortedBy { it.timestamp }
+            if (meals.isEmpty()) {
+                appendLine("${dayFmt.format(date)}: nothing logged")
+                return@forEach
+            }
+            val t = meals.flatMap { it.items }.totals()
+            appendLine(
+                "${dayFmt.format(date)}: ${t.kcal.f0()} kcal, protein ${t.protein.f0()} g, carbs ${t.carbs.f0()} g, " +
+                    "fat ${t.fat.f0()} g, sugar ${t.sugar.f0()} g, fiber ${t.fiber.f0()} g, sodium ${t.sodium.f0()} mg, " +
+                    "water ${nf.format(water.get(off))} ml"
+            )
+            meals.forEach { m ->
+                appendLine(
+                    "  ${timeFmt.format(Date(m.timestamp))} " +
+                        m.items.take(8).joinToString("; ") { "${it.name} ${it.grams.f0()} g" }
+                )
+            }
+        }
+        val limits = buildList {
+            if (goals.kcal > 0) add("calories ${goals.kcal.f0()}")
+            if (goals.sugar > 0) add("sugar ${goals.sugar.f0()} g")
+            if (goals.fat > 0) add("fat ${goals.fat.f0()} g")
+        }
+        if (limits.isNotEmpty()) appendLine("User's own daily maximums: ${limits.joinToString(", ")}")
+        appendLine("Water goal: ${nf.format(water.goalMl)} ml")
+        dietLine(context)?.let { appendLine(it) }
+    }
+}
+
+@Composable
+fun WeeklyReviewCard(db: MealDb, goalStore: GoalStore) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val prefs = remember { CoachPrefs(context) }
+    val key = remember { "week-" + dateKey(-1) }            // one review per week ending yesterday
+    var text by remember { mutableStateOf(prefs.text(key)) }
+    var generatedAt by remember { mutableStateOf(prefs.time(key)) }
+    var loading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var askConsent by remember { mutableStateOf(false) }
+    var daysLogged by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(Unit) {
+        daysLogged = withContext(Dispatchers.IO) {
+            loadDays(db, (-WEEK_DAYS..-1).toList()).count { it.value.isNotEmpty() }
+        }
+    }
+    val enough = (daysLogged ?: 0) >= MIN_DAYS_FOR_WEEKLY
+    val timeFmt = remember { SimpleDateFormat("d MMM, h:mm a", Locale.getDefault()) }
+
+    fun generate() {
+        loading = true
+        error = null
+        scope.launch {
+            val prompt = withContext(Dispatchers.IO) { buildWeekPrompt(context, db, goalStore) }
+            FoodAnalyzer.askText(WEEKLY_SYSTEM, prompt).fold(
+                onSuccess = {
+                    text = it
+                    prefs.save(key, it)
+                    generatedAt = prefs.time(key)
+                },
+                onFailure = { error = it.message ?: "Could not get a review" }
+            )
+            loading = false
+        }
+    }
+
+    fun request() {
+        if (prefs.consented) generate() else askConsent = true
+    }
+
+    if (askConsent) {
+        CoachConsentDialog(
+            "Send your week to Gemini?",
+            "the last 7 days of foods, amounts, meal times and totals, your goals, water and diet preferences",
+            onAgree = {
+                prefs.consented = true
+                askConsent = false
+                generate()
+            },
+            onDismiss = { askConsent = false }
+        )
+    }
+
+    AppCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Weekly AI review", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            val t = text
+            when {
+                loading -> Text(
+                    "Looking over your week…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                t != null -> {
+                    Text(t, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Last 7 days, generated ${timeFmt.format(Date(generatedAt))}. AI-generated general " +
+                            "information, not medical advice.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                    TextButton(onClick = { request() }, enabled = enough) { Text("Refresh") }
+                }
+                daysLogged == null -> {}
+                !enough -> Text(
+                    "Log meals on at least $MIN_DAYS_FOR_WEEKLY of the last $WEEK_DAYS days to get a weekly " +
+                        "review (${daysLogged ?: 0} so far).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                else -> {
+                    Text(
+                        "Patterns across your last 7 days, with one idea for the week ahead.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Button(onClick = { request() }, modifier = Modifier.padding(top = 8.dp)) {
+                        Text("Review my week")
                     }
                 }
             }

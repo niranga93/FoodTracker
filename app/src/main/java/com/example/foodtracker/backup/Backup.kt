@@ -181,7 +181,10 @@ object BackupCodec {
             .put("savedAt", System.currentTimeMillis())
             .put(
                 "goals",
-                JSONObject().put("kcal", goals.kcal).put("sugar", goals.sugar).put("fat", goals.fat)
+                JSONObject()
+                    .put("kcal", goals.kcal).put("sugar", goals.sugar).put("fat", goals.fat)
+                    .put("satFat", goals.satFat).put("sodium", goals.sodiumMg).put("carbs", goals.carbs)
+                    .put("protein", goals.protein).put("fiber", goals.fiber)
             )
             .put("meals", arr)
             .toString()
@@ -194,7 +197,12 @@ object BackupCodec {
         val goals = Goals(
             kcal = g?.optDouble("kcal", 0.0) ?: 0.0,
             sugar = g?.optDouble("sugar", 0.0) ?: 0.0,
-            fat = g?.optDouble("fat", 0.0) ?: 0.0
+            fat = g?.optDouble("fat", 0.0) ?: 0.0,
+            satFat = g?.optDouble("satFat", 0.0) ?: 0.0,
+            sodiumMg = g?.optDouble("sodium", 0.0) ?: 0.0,
+            carbs = g?.optDouble("carbs", 0.0) ?: 0.0,
+            protein = g?.optDouble("protein", 0.0) ?: 0.0,
+            fiber = g?.optDouble("fiber", 0.0) ?: 0.0
         )
         val arr = root.getJSONArray("meals")
         val meals = (0 until arr.length()).map { i ->

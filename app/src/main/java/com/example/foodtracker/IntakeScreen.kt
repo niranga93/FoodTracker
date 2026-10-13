@@ -75,7 +75,7 @@ fun IntakeScreen(
         item { DateNavigator(dayOffset, onDayChange) }
 
         if (features.isOn("in_sources")) item { CalorieSourcesCard(totals) }
-        if (features.isOn("in_limits")) item { LimitsCard(totals.sugar, sugarGoal, totals.fat, fatGoal) }
+        if (features.isOn("in_limits")) item { NutrientsCard(totals, goals, sugarGoal, fatGoal) }
 
         item {
             Row(

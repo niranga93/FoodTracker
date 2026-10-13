@@ -18,7 +18,7 @@ class FeaturePrefs(context: Context) {
             Feature("home_weight", "Your weight", "Latest weight and trend", "Home"),
 
             Feature("in_sources", "Where your calories come from", "Carbs, protein, fat", "Intake"),
-            Feature("in_limits", "Staying within your limits", "Sugar and fat", "Intake"),
+            Feature("in_limits", "Nutrients today", "Sugar, fat, fiber and more", "Intake"),
             Feature("in_timing", "When you ate", "Calories by time of day", "Intake"),
             Feature("in_top", "Biggest items", "Top foods today", "Intake"),
             Feature("in_water", "Hydration", "Water tracker", "Intake"),

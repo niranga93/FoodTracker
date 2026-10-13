@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.foodtracker.data.Goals
 import com.example.foodtracker.data.Meal
 import com.example.foodtracker.data.MealDb
 import com.example.foodtracker.data.ProfileStore
@@ -489,5 +490,54 @@ fun OutlookCard(db: MealDb) {
                 }
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------- nutrients
+
+private enum class NutrientKind { LIMIT, TARGET }
+
+@Composable
+private fun NutrientRow(label: String, value: Double, unit: String, goal: Double, kind: NutrientKind) {
+    val amount = if (unit == "mg") value.f0() else value.f1()
+    if (goal <= 0) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+            Text("$amount $unit", style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    } else {
+        val over = kind == NutrientKind.LIMIT && value > goal
+        val reached = kind == NutrientKind.TARGET && value >= goal
+        Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(label, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "$amount / ${goal.f0()} $unit",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = when {
+                        over -> MaterialTheme.colorScheme.error
+                        reached -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            SlimBar((value / goal).toFloat(), over)
+        }
+    }
+}
+
+/** Every tracked nutrient. Rows with a goal get a progress bar. */
+@Composable
+fun NutrientsCard(t: Totals, g: Goals, sugarGoal: Double, fatGoal: Double) {
+    WidgetCard("Nutrients today") {
+        NutrientRow("Sugar", t.sugar, "g", sugarGoal, NutrientKind.LIMIT)
+        NutrientRow("Fat", t.fat, "g", fatGoal, NutrientKind.LIMIT)
+        NutrientRow("Saturated fat", t.satFat, "g", g.satFat, NutrientKind.LIMIT)
+        NutrientRow("Carbs", t.carbs, "g", g.carbs, NutrientKind.LIMIT)
+        NutrientRow("Protein", t.protein, "g", g.protein, NutrientKind.TARGET)
+        NutrientRow("Fiber", t.fiber, "g", g.fiber, NutrientKind.TARGET)
+        NutrientRow("Sodium", t.sodium, "mg", g.sodiumMg, NutrientKind.LIMIT)
     }
 }

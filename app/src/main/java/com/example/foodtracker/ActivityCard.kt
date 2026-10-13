@@ -62,7 +62,6 @@ private fun ActivityContent(dayOffset: Int) {
 
     LaunchedEffect(Unit) { recheck() }
 
-    // Re-check every time the app comes back to the foreground
     val owner = context as LifecycleOwner
     DisposableEffect(owner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -85,7 +84,7 @@ private fun ActivityContent(dayOffset: Int) {
     if (connected) {
         AppCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
-                Text("Activity", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text("From Health Connect", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(10.dp))
                 val d = data
                 when {
@@ -99,13 +98,28 @@ private fun ActivityContent(dayOffset: Int) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    else -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        StatTile("Steps", NumberFormat.getIntegerInstance().format(d.steps), Modifier.weight(1f))
-                        StatTile("Active", "${d.activeKcal.f0()} kcal", Modifier.weight(1f))
-                        StatTile(
-                            "Total burned",
-                            if (d.totalKcal > 0) "${d.totalKcal.f0()} kcal" else "—",
-                            Modifier.weight(1f)
+                    else -> {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            StatTile("Steps", NumberFormat.getIntegerInstance().format(d.steps), Modifier.weight(1f))
+                            StatTile(
+                                "Active",
+                                if (d.activeKcal > 0) "${d.activeKcal.f0()} kcal" else "—",
+                                Modifier.weight(1f)
+                            )
+                            StatTile(
+                                "Total",
+                                if (d.totalKcal > 0) "${d.totalKcal.f0()} kcal" else "—",
+                                Modifier.weight(1f)
+                            )
+                        }
+                        Text(
+                            if (d.activeKcal <= 0 && d.steps > 0)
+                                "Exactly as Health Connect reports it. It has no active calories, so the " +
+                                    "calories burned above add an estimate for your steps."
+                            else "Exactly as Health Connect reports it.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp)
                         )
                     }
                 }

@@ -39,14 +39,15 @@ object EnergyRepo {
         val steps = act?.steps?.takeIf { it > 0 }
         val active = act?.activeKcal?.takeIf { it > 0 }
         val total = act?.totalKcal?.takeIf { it > 0 }
-        val (burn, source) = EnergyModel.estimateBurn(body, steps, active, total, dayComplete = offset < 0)
+        val est = EnergyModel.estimateBurn(body, steps, active, total)
         return DayEnergy(
             offset = offset,
             eaten = eaten,
-            burned = burn,
-            source = source,
+            burned = est.burned,
+            source = est.source,
             steps = steps,
-            logComplete = offset < 0 && eaten >= EnergyModel.MIN_LOGGED_KCAL
+            logComplete = offset < 0 && eaten >= EnergyModel.MIN_LOGGED_KCAL,
+            resting = est.resting
         )
     }
 }

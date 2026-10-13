@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import com.example.foodtracker.data.MealDb
 import com.example.foodtracker.data.ProfileStore
 import com.example.foodtracker.data.totals
+import com.example.foodtracker.energy.BurnSource
 import com.example.foodtracker.energy.CalibrationStore
 import com.example.foodtracker.energy.DayEnergy
 import com.example.foodtracker.energy.EnergyModel
@@ -102,10 +103,10 @@ fun BurnedScreen(db: MealDb, dayOffset: Int, onDayChange: (Int) -> Unit, inner: 
             val eaten = loadDay(db, dayOffset).flatMap { it.items }.totals().kcal
             val raw = EnergyRepo.build(body, dayOffset, eaten, act)
             val burned = raw.burned * factor
-            val resting = EnergyModel.restingBurn(body) * factor
+            val resting = (raw.resting * factor).coerceAtMost(burned)
             info = BurnInfo(
                 day = raw.copy(burned = burned),
-                resting = resting.coerceAtMost(burned),
+                resting = resting,
                 activity = (burned - resting).coerceAtLeast(0.0),
                 hasDeviceData = act != null
             )
@@ -176,8 +177,20 @@ fun BurnedScreen(db: MealDb, dayOffset: Int, onDayChange: (Int) -> Unit, inner: 
                                     )
                                 }
                             }
-                            LegendRow(MaterialTheme.colorScheme.primary, "Resting (BMR + digestion)", "${i.resting.f0()} kcal")
-                            LegendRow(MaterialTheme.colorScheme.secondary, "Activity", "${i.activity.f0()} kcal")
+                            val fromDevice = i.day.source == BurnSource.DEVICE_TOTAL ||
+                                i.day.source == BurnSource.DEVICE_RESTING_PLUS_STEPS
+                            val stepsEstimated = i.day.source == BurnSource.BMR_PLUS_STEPS ||
+                                i.day.source == BurnSource.DEVICE_RESTING_PLUS_STEPS
+                            LegendRow(
+                                MaterialTheme.colorScheme.primary,
+                                if (fromDevice) "Resting (Health Connect)" else "Resting (BMR + digestion)",
+                                "${i.resting.f0()} kcal"
+                            )
+                            LegendRow(
+                                MaterialTheme.colorScheme.secondary,
+                                if (stepsEstimated) "Activity (estimated from steps)" else "Activity",
+                                "${i.activity.f0()} kcal"
+                            )
                             Text(
                                 "Source: ${i.day.source.label}" +
                                     (i.day.steps?.let { " (${"%,d".format(it)} steps)" } ?: "") + ".",

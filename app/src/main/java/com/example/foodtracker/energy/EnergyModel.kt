@@ -1,8 +1,9 @@
 package com.example.foodtracker.energy
 
 enum class BurnSource(val label: String) {
-    DEVICE_TOTAL("device total calories"),
-    BMR_PLUS_ACTIVITY("resting + device active calories"),
+    DEVICE_TOTAL("Health Connect total calories"),
+    DEVICE_RESTING_PLUS_STEPS("Health Connect total + estimate from steps"),
+    BMR_PLUS_ACTIVITY("resting + Health Connect active calories"),
     BMR_PLUS_STEPS("resting + estimate from steps"),
     BMR_ONLY("resting estimate only (no activity data)")
 }
@@ -15,10 +16,13 @@ data class DayEnergy(
     val burned: Double,
     val source: BurnSource,
     val steps: Long?,
-    val logComplete: Boolean    // finished day with a plausible amount of food logged
+    val logComplete: Boolean,   // finished day with a plausible amount of food logged
+    val resting: Double = 0.0   // the resting part of `burned`
 ) {
     val balance: Double get() = eaten - burned
 }
+
+data class BurnEstimate(val burned: Double, val source: BurnSource, val resting: Double)
 
 data class Prediction(
     val usedDays: Int,
@@ -73,21 +77,34 @@ object EnergyModel {
         body: Body,
         steps: Long?,
         activeKcal: Double?,
-        deviceTotal: Double?,
-        dayComplete: Boolean
-    ): Pair<Double, BurnSource> {
+        deviceTotal: Double?
+    ): BurnEstimate {
         val bmr = bmr(body)
-        if (dayComplete && deviceTotal != null && deviceTotal in (0.9 * bmr)..(3.5 * bmr)) {
-            return deviceTotal to BurnSource.DEVICE_TOTAL
-        }
         val resting = bmr * RESTING_FACTOR
+
+        // A plausible Health Connect total is trusted as the base figure
+        val total = deviceTotal?.takeIf { it in (0.9 * bmr)..(3.5 * bmr) }
+        if (total != null) {
+            if (activeKcal != null && activeKcal > 0) {
+                return BurnEstimate(total, BurnSource.DEVICE_TOTAL, (total - activeKcal).coerceAtLeast(0.0))
+            }
+            // No active calories reported. A total this close to resting looks like a resting-only
+            // figure, so add the steps estimate on top.
+            if (total < 1.2 * bmr) {
+                val extra = if (steps != null && steps > 0) stepKcal(steps, body) else 0.0
+                val source = if (extra > 0) BurnSource.DEVICE_RESTING_PLUS_STEPS else BurnSource.DEVICE_TOTAL
+                return BurnEstimate(total + extra, source, total)
+            }
+            return BurnEstimate(total, BurnSource.DEVICE_TOTAL, minOf(resting, total))
+        }
+
         if (activeKcal != null && activeKcal > 0) {
-            return (resting + activeKcal) to BurnSource.BMR_PLUS_ACTIVITY
+            return BurnEstimate(resting + activeKcal, BurnSource.BMR_PLUS_ACTIVITY, resting)
         }
         if (steps != null && steps > 0) {
-            return (resting + stepKcal(steps, body)) to BurnSource.BMR_PLUS_STEPS
+            return BurnEstimate(resting + stepKcal(steps, body), BurnSource.BMR_PLUS_STEPS, resting)
         }
-        return resting to BurnSource.BMR_ONLY
+        return BurnEstimate(resting, BurnSource.BMR_ONLY, resting)
     }
 
     /** Uses completed days only. Returns null when there isn't enough reliable data. */

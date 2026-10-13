@@ -22,7 +22,7 @@ import kotlin.math.max
 
 object FoodAnalyzer {
     // If you get a 404, pick a current free Flash model in AI Studio and change this.
-    private const val MODEL = "gemini-3.5-flash"
+    private const val MODEL = "gemini-1.5-flash"
     private const val URL =
         "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent"
 

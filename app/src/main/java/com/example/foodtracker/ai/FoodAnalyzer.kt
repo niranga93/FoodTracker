@@ -27,17 +27,11 @@ object FoodAnalyzer {
     private fun urlFor(model: String) =
         "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent"
 
-    // Blank keys are ignored, so the app still works with only one key configured
-    private val keys: List<String> = listOf(
-        BuildConfig.GEMINI_API_KEY,
-        BuildConfig.GEMINI_API_KEY_2,
-        BuildConfig.GEMINI_API_KEY_3
-    ).filter { it.isNotBlank() }
-
     // Times until which we avoid something. Rate limits are per model and key, since quotas are.
-    private val badKeyUntil = LongArray(3)
-    private val rateLimitedUntil = Array(MODELS.size) { LongArray(3) }
+    private val badKeyUntil = LongArray(6)
+    private val rateLimitedUntil = Array(MODELS.size) { LongArray(6) }
     private val modelGoneUntil = LongArray(MODELS.size)
+    private var seenKeysVersion = -1
     private const val RATE_LIMIT_COOLDOWN_MS = 2 * 60 * 1000L
     private const val BAD_KEY_COOLDOWN_MS = 60 * 60 * 1000L
     private const val MODEL_GONE_COOLDOWN_MS = 60 * 60 * 1000L
@@ -211,7 +205,14 @@ alcohol, honey. Use an empty list if none apply.
      * - Any other 400: fails at once, since no key or model would fix a malformed request.
      */
     private suspend fun callWithFailover(bodyJson: String): String {
-        check(keys.isNotEmpty()) { "No Gemini API key configured in local.properties" }
+        val keys = GeminiKeys.list()
+        check(keys.isNotEmpty()) { "No Gemini key yet. Add yours in Profile > Connections." }
+        if (seenKeysVersion != GeminiKeys.version) {
+            badKeyUntil.fill(0L)
+            modelGoneUntil.fill(0L)
+            rateLimitedUntil.forEach { it.fill(0L) }
+            seenKeysVersion = GeminiKeys.version
+        }
         var waitMs = 2000L
         var lastError = "unknown"
 

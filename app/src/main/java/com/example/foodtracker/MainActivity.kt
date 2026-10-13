@@ -125,6 +125,7 @@ class MainActivity : ComponentActivity() {
         NutritionLookup.init(applicationContext)
         PortionStore.init(applicationContext)
         BackupService.init(applicationContext)
+        com.example.foodtracker.ai.GeminiKeys.init(applicationContext)
         if (savedInstanceState == null) openPendingFrom(intent)
         // Photos queued offline get another chance whenever the app starts
         if (PendingMeals.all(this).any { it.status == PendingStatus.WAITING }) AnalyzePendingWorker.enqueue(this)
@@ -262,8 +263,15 @@ fun FoodApp(nav: NavViewModel = viewModel()) {
         pending = null
     }
 
+    fun needKey(): Boolean {
+        if (com.example.foodtracker.ai.GeminiKeys.hasAny()) return false
+        Toast.makeText(context, "Add your free Gemini key first", Toast.LENGTH_LONG).show()
+        nav.open(Screen.Page("connections"))
+        return true
+    }
+
     fun pickFromGallery() {
-        galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        if (!needKey()) galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     }
 
     fun go(target: Screen) {
@@ -286,7 +294,7 @@ fun FoodApp(nav: NavViewModel = viewModel()) {
             goalStore = goalStore,
             dayOffset = state.dayOffset,
             onDayChange = nav::setDay,
-            onPhoto = { go(Screen.Camera) },
+            onPhoto = { if (!needKey()) go(Screen.Camera) },
             onScan = { go(Screen.Barcode) },
             onManual = { nav.open(Screen.Manual) },
             onDescribe = { nav.open(Screen.Describe()) },

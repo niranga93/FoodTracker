@@ -43,6 +43,9 @@ android {
 
     buildTypes {
         release {
+            buildConfigField("String", "GEMINI_API_KEY", "\"\"")
+            buildConfigField("String", "GEMINI_API_KEY_2", "\"\"")
+            buildConfigField("String", "GEMINI_API_KEY_3", "\"\"")
             optimization {
                 enable = true
                 packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")

@@ -89,7 +89,7 @@ fun ProfileHub(onOpenPage: (String) -> Unit, inner: PaddingValues) {
         }
         AppCard(Modifier.fillMaxWidth()) {
             Column {
-                NavRow("Connections", "Health Connect, Google Drive") { onOpenPage("connections") }
+                NavRow("Connections", "Gemini key, Health Connect, Drive") { onOpenPage("connections") }
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                 NavRow("Data & privacy", "Export, policy") { onOpenPage("data") }
             }
@@ -124,7 +124,7 @@ fun PageScreen(id: String, db: MealDb, goalStore: GoalStore, onBack: () -> Unit)
                 "goals" -> { GoalsCard(goalStore); TargetCard() }
                 "diet" -> DietCard()
                 "weight" -> WeightCard()
-                "connections" -> { HealthConnectorCard(); BackupCard(db, goalStore) }
+                "connections" -> { GeminiKeyCard(); HealthConnectorCard(); BackupCard(db, goalStore) }
                 "data" -> {
                     DataCard(db)
                     PrivacyCard()      // delete this line if you haven't added Privacy.kt

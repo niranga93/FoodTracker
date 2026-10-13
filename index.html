@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FoodTracker Privacy Policy</title>
+    <style>
+        :root {
+            --primary: #2E7D32;
+            --primary-dark: #1B5E20;
+            --text: #1F2937;
+            --bg: #F9FAFB;
+            --card: #FFFFFF;
+            --border: #E5E7EB;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: var(--text);
+            background-color: var(--bg);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+        }
+        .header {
+            background-color: var(--primary);
+            color: white;
+            padding: 2.5rem 1.5rem;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0 0 0.5rem 0;
+            font-size: 2rem;
+        }
+        .header p {
+            margin: 0;
+            opacity: 0.9;
+            font-size: 0.95rem;
+        }
+        .container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1.5rem 3rem 1.5rem;
+        }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem 2rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        h2 {
+            color: var(--primary-dark);
+            font-size: 1.25rem;
+            margin-top: 0;
+            border-bottom: 2px solid #E8F5E9;
+            padding-bottom: 0.4rem;
+        }
+        ul {
+            padding-left: 1.2rem;
+        }
+        li {
+            margin-bottom: 0.4rem;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+        }
+        th, td {
+            border: 1px solid var(--border);
+            padding: 0.6rem 0.8rem;
+            text-align: left;
+        }
+        th {
+            background-color: #E8F5E9;
+            color: var(--primary-dark);
+        }
+        tr:nth-child(even) {
+            background-color: #F9FAFB;
+        }
+        .footer {
+            text-align: center;
+            font-size: 0.85rem;
+            color: #6B7280;
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+        a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>FoodTracker Privacy Policy</h1>
+        <p>Effective Date: October 13, 2026 · Author: NNRZONE, SG (@Niranga)</p>
+    </div>
+
+    <div class="container">
+
+        <div class="card">
+            <h2>Summary</h2>
+            <p>FoodTracker keeps your food log, profile and settings on your phone, and it has no accounts, ads or analytics. The app is run by <strong>NNRZONE, SG</strong> ("we"). It sends data off your phone only for features you use: photo analysis and the AI coach (Google Gemini), food lookups (USDA FoodData Central and Open Food Facts), and optional backup to your own Google Drive.</p>
+        </div>
+
+        <div class="card">
+            <h2>Data Stored on Your Phone</h2>
+            <p>Your food log and settings are stored only in the app's private storage on your phone, and we cannot see them. This includes:</p>
+            <ul>
+                <li>Meals, with their foods, amounts, nutrition values and times</li>
+                <li>Photos you take of meals, kept in the app's temporary cache folder until Android clears it or you clear the app's data</li>
+                <li>Profile details you enter: name, year of birth, sex, height and weight</li>
+                <li>Goals, water intake, weight entries, and favorite foods and meals</li>
+                <li>Diet and allergy choices, and foods whose nutrition match you corrected</li>
+                <li>Cached nutrition lookups, and your choice to turn Health Connect on or off</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>Data Sent Off Your Phone</h2>
+            <p>Four services receive data, and only when you use the feature that needs them:</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Service</th>
+                        <th>What is sent</th>
+                        <th>Why</th>
+                        <th>When</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Google Gemini API</strong></td>
+                        <td>A resized photo of your meal; for the AI coach, a text summary of one day</td>
+                        <td>Identify foods and estimate portions; write the coach summary</td>
+                        <td>When you analyze a photo or tap <em>Get summary</em></td>
+                    </tr>
+                    <tr>
+                        <td><strong>USDA FoodData Central</strong></td>
+                        <td>Food names, as search text</td>
+                        <td>Look up nutrition values</td>
+                        <td>When a meal is analyzed or you search for a food</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Open Food Facts</strong></td>
+                        <td>The barcode number you scan</td>
+                        <td>Look up a packaged product</td>
+                        <td>When you scan a barcode</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Google Sign-in & Drive</strong></td>
+                        <td>Your Google authorization, and a backup file with your meals and goals</td>
+                        <td>Optional backup and restore</td>
+                        <td>Only after you tap <em>Connect</em> on Google Drive</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p>These services also see your IP address, as any website does. Requests to Gemini, USDA and Open Food Facts use the app's own keys, not your account. Barcode scanning runs on your phone, and the camera image is not uploaded for it.</p>
+        </div>
+
+        <div class="card">
+            <h2>Health Connect Data</h2>
+            <p>The app reads your steps, active calories and total calories burned from Health Connect only if you allow it, and only to show them to you. Access is read-only. The app uses this data on your phone to display your activity and to estimate calories burned and your energy balance.</p>
+            <p>Health Connect data is not sent to Gemini or any other service, is not shared with third parties, is not used for advertising, and is not included in your Google Drive backup. You can disconnect at any time in the app (Profile, then Connectors) or by removing the app's permissions in Health Connect settings. After you disconnect, the app stops reading and hides this data.</p>
+        </div>
+
+        <div class="card">
+            <h2>AI Features and Gemini</h2>
+            <p>Each Gemini request contains only what is listed here:</p>
+            <ul>
+                <li><strong>Photo analysis:</strong> a resized JPEG of the meal and fixed instructions. It includes no name, profile or health data.</li>
+                <li><strong>AI coach:</strong> the selected day's foods, amounts and totals; your daily maximums if you set them; water intake; an estimate of calories burned that your phone calculates from your profile; and your diet and allergy choices.</li>
+                <li><strong>Never sent:</strong> your name, year of birth, sex, height, weight, Health Connect data, or your Google account.</li>
+            </ul>
+            <p>The AI coach asks for your consent before its first request, and saved summaries stay on your phone. We currently use the Gemini API free tier. Under its terms, Google may use requests and responses to improve its products, and human reviewers may read them. Photograph only food. If we move to a paid plan, this section will be updated.</p>
+            <p><em>AI summaries and portion estimates can be wrong.</em></p>
+        </div>
+
+        <div class="card">
+            <h2>What We Do Not Do</h2>
+            <p>We do not sell or share your data, show ads, or track you.</p>
+            <ul>
+                <li><strong>No accounts:</strong> you do not sign up with us, and we run no server that stores your data.</li>
+                <li><strong>No advertising or analytics code</strong> in the app.</li>
+                <li><strong>No crash-reporting code</strong> of our own. Google Play and Android may collect their own diagnostics under Google's policies.</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>Storage, Security and Retention</h2>
+            <p>Your data stays on your phone until you delete it, and we keep no copy. The app sends requests over HTTPS, and its data sits in private app storage that other apps cannot read on a normal, unrooted phone.</p>
+            <p>If you use Google Drive backup, the backup file stays in your Google Drive until you delete it. If Android's own device backup is turned on, Google may also include this app's data in your phone backup.</p>
+        </div>
+
+        <div class="card">
+            <h2>Your Choices and Deleting Your Data</h2>
+            <p>You control your data in the app, and you can delete all of it yourself:</p>
+            <ul>
+                <li><strong>Delete entries:</strong> remove meals, weight entries and favorites inside the app.</li>
+                <li><strong>Export:</strong> Profile, then Your data, saves your meals, daily totals and weights as CSV files to a place you choose.</li>
+                <li><strong>Health Connect:</strong> disconnect under Profile, then Connectors, or remove permissions in Health Connect settings.</li>
+                <li><strong>Google Drive:</strong> disconnect under Profile, then Connectors. This stops backups but leaves your Drive copy. To delete it, open Google Drive on the web, go to Settings, then Manage apps, and delete this app's hidden data. You can also remove the app's access in your Google Account settings.</li>
+                <li><strong>Avoid sending data to Gemini:</strong> log with barcode scan, manual entry or favorites instead of photos, and do not use the AI coach.</li>
+                <li><strong>Delete everything on your phone:</strong> clear the app's storage in Android settings, or uninstall the app.</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>Children</h2>
+            <p>FoodTracker is not meant for anyone under 18, and we do not knowingly collect data from children. The app turns off calorie-burn and balance estimates for profiles under 18.</p>
+        </div>
+
+        <div class="card">
+            <h2>Not Medical Advice</h2>
+            <p>FoodTracker gives general estimates, not medical advice. Calories burned, balance, weight forecasts and AI summaries are estimates and can be wrong. Allergen and diet warnings are best effort: photos cannot show hidden ingredients, so read labels if you have an allergy. Talk to a doctor or dietitian about health, weight or allergy decisions.</p>
+        </div>
+
+        <div class="card">
+            <h2>Changes to This Policy</h2>
+            <p>We will post any change on this page and update the date at the top.</p>
+        </div>
+
+        <div class="card">
+            <h2>Contact</h2>
+            <p>Send questions or requests to <a href="mailto:foodtracker777@gmail.com">foodtracker777@gmail.com</a>.</p>
+            <p>This app is run by <strong>NNRZONE, SG</strong>.</p>
+        </div>
+
+        <div class="footer">
+            <p>&copy; 2026 NNRZONE, SG. All rights reserved. · <a href="https://github.com/niranga93/FoodTracker">FoodTracker on GitHub</a></p>
+        </div>
+
+    </div>
+
+</body>
+</html>

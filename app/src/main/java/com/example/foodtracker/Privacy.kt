@@ -15,7 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 // Hosted Privacy Policy URL on GitHub Pages
-const val PRIVACY_URL = "https://niranga93.github.io/FoodTracker/privacy.html"
+const val PRIVACY_URL = "https://niranga93.github.io/FoodTracker/"
 
 fun openPrivacyPolicy(context: android.content.Context) {
     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_URL)))

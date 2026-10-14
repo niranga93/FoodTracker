@@ -28,7 +28,7 @@ Everything for the first Play release of **Nourio 1.0.0 (versionCode 1)**. Work 
 | Package (app ID) | `com.nnrzone.nourio` (permanent after the first upload) |
 | Version | 1.0.0 (versionCode 1) |
 | Min / target Android | API 26 (Android 8.0) / API 37 |
-| Developer | NNRZONE, SG |
+| Developer | NNRZONE |
 | Support email | foodtracker777@gmail.com |
 | Privacy policy | https://niranga93.github.io/FoodTracker/ |
 

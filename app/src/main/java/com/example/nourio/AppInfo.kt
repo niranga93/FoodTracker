@@ -9,7 +9,7 @@ import android.os.Build
 import android.widget.Toast
 
 // Fill these in once. They appear on the About page and in support emails.
-const val DEVELOPER_NAME = "NNRZONE, SG"
+const val DEVELOPER_NAME = "NNRZONE"
 const val SUPPORT_EMAIL = "foodtracker777@gmail.com"
 const val WEBSITE_URL = ""                                // optional; leave empty to hide
 const val PRIVACY_URL = "https://niranga93.github.io/FoodTracker/"     // hosted on GitHub Pages

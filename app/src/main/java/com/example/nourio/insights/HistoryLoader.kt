@@ -15,6 +15,7 @@ import com.example.nourio.data.MealDb
 import com.example.nourio.data.WaterStore
 import com.example.nourio.data.WeightDb
 import com.example.nourio.data.totals
+import com.example.nourio.energy.EnergyRepo
 import com.example.nourio.health.HealthExtras
 import com.example.nourio.health.HealthPrefs
 import com.example.nourio.health.HealthRepo
@@ -25,6 +26,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.Period
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 /** Builds [DayMetrics] for the last [days] days from the food log, water, weigh-ins and Health Connect. */
 object HistoryLoader {
@@ -67,7 +69,11 @@ object HistoryLoader {
             weights[date.plusDays(1)]?.let { next -> values[date]?.set(Metric.WEIGHT_CHANGE, next - kg) }
         }
 
-        readHealthConnect(context, first, today, values)
+        // Store screenshots render on the PC, where Health Connect doesn't exist: use the test's activity
+        val demo = EnergyRepo.activityOverride
+        if (demo != null) values.forEach { (date, v) ->
+            if (date != today) demo(ChronoUnit.DAYS.between(today, date).toInt())?.let { if (it.steps > 0) v[Metric.STEPS] = it.steps.toDouble() }
+        } else readHealthConnect(context, first, today, values)
         values.entries.sortedBy { it.key }.map { DayMetrics(it.key, it.value) }
     }
 

@@ -16,8 +16,8 @@ Everything for the first Play release of **Nourio 1.0.0 (versionCode 1)**. Work 
 | `play-console-forms.md` | Answers for App content: privacy policy, app access, ads, rating, audience, health declaration, Health Connect permissions, data safety | Yes |
 | `store/icon-512.png` | 512 x 512 app icon | Yes |
 | `store/feature-graphic-1024x500.png` | Feature graphic | Yes |
-| `store/screenshots/` | Phone screenshots go here (see step 6) | Yes |
-| `tools/CropScreenshots.java` | Crops phone screenshots to Play's size limits | Yes |
+| `store/screenshots/` | 7 store screenshots, 1080 x 1920, ready to upload (see step 6) | Yes |
+| `tools/FrameScreenshots.java`, `tools/CropScreenshots.java` | Make the store screenshots: add headlines to rendered screens, or crop phone photos to Play's limits | Yes |
 | `debug-app-data-backup/` | Raw copy of the old debug install's data. Private. | No |
 
 ## App facts
@@ -76,15 +76,21 @@ Fill in every item from `play-console-forms.md`. Create a separate Gemini key fo
 - [ ] Text from `store-listing.md`.
 - [x] App icon: `store/icon-512.png`.
 - [x] Feature graphic: `store/feature-graphic-1024x500.png`.
-- [ ] Phone screenshots, 2 to 8. Suggested: Home report card, Move and This week, Intake, Burned charts, Insights, Profile.
-  1. On the phone, open each screen and take a screenshot (power + volume down).
-  2. Copy them to `release\store\screenshots\raw\`.
-  3. Crop them to Play's limits (long side at most twice the short side):
-     ```
-     "C:\Program Files\Android\Android Studio\jbr\bin\java" release\tools\CropScreenshots.java release\store\screenshots\raw release\store\screenshots
-     ```
-  4. Upload the cropped PNGs from `release\store\screenshots\`.
-  - These are public: use demo data or check that no name, weight or health detail you'd rather keep private is visible.
+- [x] Phone screenshots: upload the 7 PNGs in `store/screenshots/` (1080 x 1920, in this order):
+  1. `01-home.png`: Your day as a report card
+  2. `02-dashboard.png`: Move more, every day
+  3. `03-intake.png`: Know what's on your plate
+  4. `04-burned.png`: Eaten vs burned
+  5. `05-insights.png`: Tips from your own data
+  6. `06-insights-links.png`: Find what affects you
+  7. `07-profile.png`: Your journey to your goal
+
+  They are the real app screens with a fictional demo user ("Alex Morgan"), rendered on the PC, so no real personal data appears. To regenerate them after UI changes (from `D:\claude projects\FoodTracker`, in a Command Prompt):
+  ```
+  set STORE_SHOTS=1 && gradlew :app:testDebugUnitTest --tests "*StoreScreenshotsTest*"
+  "C:\Program Files\Android\Android Studio\jbr\bin\java" release\tools\FrameScreenshots.java
+  ```
+  The first command renders the screens to `store/screenshots/raw-render/` (gitignored); the second adds the headlines. Captions are set in `tools/FrameScreenshots.java`, demo data in `app/src/test/.../StoreScreenshotsTest.kt`. `tools/CropScreenshots.java` is still there if you'd rather use photos from a phone.
 
 ### 7. Go live
 - [ ] Test the internal build: photo, describe, share a recipe link, barcode, Packaged search, Health Connect (allow the new data types), Insights (tap "Send today's tip now" and Accept from the notification), Drive backup, backup file.

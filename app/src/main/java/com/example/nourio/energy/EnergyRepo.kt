@@ -44,8 +44,15 @@ object EnergyRepo {
         synchronized(activityCache) { activityCache.clear() }
     }
 
+    /**
+     * Demo hook: supplies activity instead of Health Connect. Only the store-screenshot test sets it
+     * (the screens render on the PC, where Health Connect doesn't exist); null in the app.
+     */
+    @Volatile var activityOverride: ((Int) -> DayActivity?)? = null
+
     /** Health Connect data per day offset. Empty if not available, switched off, or not permitted. */
     suspend fun activityFor(context: Context, offsets: List<Int>): Map<Int, DayActivity> {
+        activityOverride?.let { f -> return offsets.mapNotNull { o -> f(o)?.let { o to it } }.toMap() }
         if (HealthConnectClient.getSdkStatus(context) != HealthConnectClient.SDK_AVAILABLE) return emptyMap()
         if (!HealthPrefs(context).enabled) return emptyMap()
         val client = HealthConnectClient.getOrCreate(context)

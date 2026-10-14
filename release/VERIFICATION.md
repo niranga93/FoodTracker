@@ -7,7 +7,7 @@ Checked on 14 October 2026, before the first Play upload.
 |---|---|
 | Kotlin compile (full rebuild) | No errors, no warnings |
 | Android Lint | **No issues** (was 83 warnings and 18 hints at the first review) |
-| Unit tests | 16 of 16 pass: report-card grading (4), Gemini model ranking (4), insights engine (7), example (1) |
+| Unit tests | 16 of 16 pass: report-card grading (4), Gemini model ranking (4), insights engine (7), example (1). The 7 store-screenshot renders are skipped unless STORE_SHOTS=1. |
 | Release bundle | `nourio-1.0.0-1.aab`, 17.7 MB |
 | Release APK | `nourio-1.0.0-1.apk`, 24.7 MB |
 | R8 | Whole-app shrinking; release build installed and opened on a Samsung phone with no crash in the log |

@@ -22,3 +22,4 @@ release/debug-app-data-backup/
 release/*.apk
 release/mapping-*.txt
 release/store/screenshots/raw/
+release/store/screenshots/raw-render/

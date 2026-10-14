@@ -3,13 +3,16 @@ package com.example.nourio
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.health.connect.client.HealthConnectClient
@@ -17,6 +20,9 @@ import com.example.nourio.health.DayBody
 import com.example.nourio.health.SleepStages
 import com.example.nourio.health.HealthExtras
 import com.example.nourio.health.HealthPrefs
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 private fun hm(minutes: Long) = "${minutes / 60}h ${minutes % 60}m"
 
@@ -50,7 +56,12 @@ fun SleepCard(days: List<DayBody>, dayOffset: Int) {
     val color = MaterialTheme.colorScheme.primary
     WidgetCard(
         "Sleep, last 7 nights",
-        trailing = { if (logged.isNotEmpty()) Pill("avg ${hm(logged.average().toLong())}") }
+        trailing = {
+            when {
+                logged.size >= 2 -> Pill("avg ${hm(logged.average().toLong())}")
+                logged.size == 1 -> Pill("1 night recorded")
+            }
+        }
     ) {
         Row(
             Modifier.fillMaxWidth().height(90.dp),
@@ -165,16 +176,75 @@ fun VitalsCard(day: DayBody, dayOffset: Int) {
 
 @Composable
 fun WorkoutsCard(day: DayBody, dayOffset: Int) {
-    WidgetCard(if (dayOffset == 0) "Workouts today" else "Workouts that day") {
-        day.workouts.forEach { w ->
-            Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(w.name, style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    hm(w.minutes).removePrefix("0h "),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+    val timeFmt = remember { DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault()) }
+    val zone = remember { ZoneId.systemDefault() }
+    val total = day.workouts.sumOf { it.minutes }
+    val kcal = day.workouts.mapNotNull { it.kcal }.sum()
+    WidgetCard(
+        if (dayOffset == 0) "Workouts today" else "Workouts that day",
+        trailing = { Pill(hm(total).removePrefix("0h ") + if (kcal >= 1) " · ${kcal.f0()} kcal" else "") }
+    ) {
+        day.workouts.forEachIndexed { i, w ->
+            if (i > 0) HorizontalDivider(Modifier.padding(vertical = 6.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(w.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Text(
+                        timeFmt.format(w.start.atZone(zone)) + (if (w.source.isNotBlank()) " · ${w.source}" else ""),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(hm(w.minutes).removePrefix("0h "), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                    w.kcal?.let {
+                        Text("${it.f0()} kcal", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                    }
+                }
             }
         }
+        Text(
+            "Sessions recorded twice by different apps are counted once. Paused time is left out.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 10.dp)
+        )
     }
+}
+
+/** Sleep, heart rate and vitals, last 7 days. Opened from Profile > Health. */
+@Composable
+fun BodyPage(dayOffset: Int) {
+    val openPage = LocalOpenPage.current
+    val days by rememberBodyData(dayOffset)
+    val d = days
+    if (d == null) {
+        WidgetCard("Sleep, heart rate and vitals") {
+            Text(
+                "Turn on \"Read sleep, heart rate, workouts, weight\" in Connections and allow the data, " +
+                    "then your sleep, heart rate and vitals show here.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(onClick = { openPage("connections") }, modifier = Modifier.fillMaxWidth()) {
+                Text("Open Connections")
+            }
+        }
+        return
+    }
+    val first = d.first()
+    val any = d.any { it.sleepMinutes != null || it.hrAvg != null || it.restingHr != null } ||
+        first.vo2max != null || first.spo2 != null || first.distanceKm != null
+    if (!any) {
+        WidgetCard("Nothing recorded yet") {
+            Text(
+                "Health Connect has no sleep, heart rate or vitals for these days. They appear when a watch " +
+                    "or another app records them.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+    if (d.any { it.sleepMinutes != null }) SleepCard(d, dayOffset)
+    if (d.any { it.hrAvg != null || it.restingHr != null }) HeartRateCard(d)
+    if (first.vo2max != null || first.spo2 != null || first.distanceKm != null) VitalsCard(first, dayOffset)
 }

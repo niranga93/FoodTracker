@@ -19,3 +19,6 @@ keystore.properties
 *.jks
 release/*.aab
 release/debug-app-data-backup/
+release/*.apk
+release/mapping-*.txt
+release/store/screenshots/raw/

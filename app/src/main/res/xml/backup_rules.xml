@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-   Android's own backup on Android 11 and earlier. Same rule as data_extraction_rules.xml:
-   the Keystore-encrypted Gemini keys can't be decrypted on another phone, so they stay out.
+   Android's own backup on Android 11 and earlier. Same rules as data_extraction_rules.xml:
+   the Keystore-encrypted Gemini keys and Health Connect-derived values stay on the phone.
 -->
 <full-backup-content>
     <exclude domain="sharedpref" path="gemini_user_keys.xml" />
+    <exclude domain="sharedpref" path="health.xml" />
+    <exclude domain="sharedpref" path="insights.xml" />
 </full-backup-content>

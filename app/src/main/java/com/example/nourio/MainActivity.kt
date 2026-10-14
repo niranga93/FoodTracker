@@ -116,6 +116,7 @@ class MainActivity : ComponentActivity() {
         PortionStore.init(applicationContext)
         BackupService.init(applicationContext)
         com.example.nourio.energy.EnergyRepo.init(applicationContext)
+        com.example.nourio.insights.InsightWorker.schedule(applicationContext)     // daily tip, keeps an existing schedule
         com.example.nourio.ai.GeminiKeys.init(applicationContext)
         if (savedInstanceState == null) {
             openPendingFrom(intent)
@@ -157,6 +158,8 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         HealthSync.runAsync(this)           // imports new weights from Health Connect
+        // Work out tips while Health Connect can be read (the app is open), for the daily notification
+        lifecycleScope.launch { runCatching { com.example.nourio.insights.InsightWorker.refreshTips(applicationContext) } }
     }
 
     override fun onStop() {
@@ -203,6 +206,10 @@ class MainActivity : ComponentActivity() {
     private fun openPendingFrom(intent: Intent?) {
         val id = intent?.getLongExtra(AnalyzePendingWorker.EXTRA_PENDING_ID, -1L) ?: -1L
         if (id > 0) nav.open(Screen.ReviewPending(id))
+        // From the daily tip notification. Only this page is allowed, since other apps can start this activity.
+        if (intent?.getStringExtra(com.example.nourio.insights.InsightWorker.EXTRA_OPEN_PAGE) == "insights") {
+            nav.open(Screen.Page("insights"))
+        }
     }
 }
 
@@ -337,7 +344,8 @@ fun FoodApp(nav: NavViewModel = viewModel()) {
                 onDescribe = { nav.open(Screen.Describe()) },
                 onEditMeal = { nav.open(Screen.EditMeal(it)) },
                 onOpenHistory = { nav.open(Screen.History) },
-                onOpenPage = { nav.open(Screen.Page(it)) }
+                onOpenPage = { nav.open(Screen.Page(it)) },
+                onOpenPending = { nav.open(Screen.ReviewPending(it)) }
             )
             is Screen.History -> HistoryPage(
                 db = db,
@@ -446,7 +454,8 @@ fun MainScaffold(
     onDescribe: () -> Unit,
     onEditMeal: (Long) -> Unit,
     onOpenHistory: () -> Unit,
-    onOpenPage: (String) -> Unit
+    onOpenPage: (String) -> Unit,
+    onOpenPending: (Long) -> Unit
 ) {
     val aiOn = rememberAiAvailable()
     Scaffold(
@@ -472,10 +481,10 @@ fun MainScaffold(
     ) { inner ->
         RefreshBox(topInset = inner.calculateTopPadding()) {
             when (tab) {
-                NavTab.Home -> HomeScreen(db, goalStore, dayOffset, onDayChange, onTab, { onOpenPage("settings") }, inner)
+                NavTab.Home -> HomeScreen(db, goalStore, dayOffset, onDayChange, onTab, { onOpenPage("settings") }, onOpenPending, inner)
                 NavTab.Intake -> IntakeScreen(db, goalStore, dayOffset, onDayChange, onEditMeal, onOpenHistory, inner)
                 NavTab.Burned -> BurnedScreen(db, dayOffset, onDayChange, inner)
-                NavTab.Profile -> ProfileHub(onOpenPage, inner)
+                NavTab.Profile -> ProfileHub(db, onOpenPage, inner)
             }
         }
     }
@@ -538,119 +547,6 @@ private fun MenuLabel(title: String, hint: String) {
         Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
-
-
-
-@Composable
-fun HistoryScreen(
-    db: MealDb,
-    goalStore: GoalStore,
-    inner: PaddingValues,
-    onOpenDay: (Int) -> Unit
-) {
-    val goals = remember { goalStore.load() }
-    val offsets = remember { (0 downTo -13).toList() }
-    val days by produceState(offsets.map { it to emptyList<FoodItem>() }) {
-        value = withContext(Dispatchers.IO) {
-            val byDay = loadDays(db, offsets)
-            offsets.map { off -> off to byDay[off].orEmpty().flatMap { it.items } }
-        }
-    }
-    val logged = days.filter { it.second.isNotEmpty() }
-    val avgKcal = if (logged.isEmpty()) 0.0 else logged.map { it.second.totals().kcal }.average()
-    val maxKcal = days.maxOfOrNull { it.second.totals().kcal } ?: 0.0
-    val scale = maxOf(maxKcal, goals.kcal, 1.0)
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(inner),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            Text("History", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        }
-        item { WeekCard(db) }
-        item { WeeklyReviewCard(db, goalStore) }
-        item { PredictionCard(db) }
-        item { WeightCard() }
-        item {
-            AppCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        StatTile("Days logged", "${logged.size} / 14", Modifier.weight(1f))
-                        StatTile("Daily average", "${avgKcal.f0()} kcal", Modifier.weight(1f))
-                    }
-                    Spacer(Modifier.height(16.dp))
-                    Text("Calories, last 14 days", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(12.dp))
-                    Row(
-                        Modifier.fillMaxWidth().height(110.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.Bottom
-                    ) {
-                        days.reversed().forEach { (_, foods) ->
-                            val kcal = foods.totals().kcal
-                            val frac = (kcal / scale).toFloat().coerceIn(0.03f, 1f)
-                            val over = goals.kcal > 0 && kcal > goals.kcal
-                            Box(
-                                Modifier.weight(1f).fillMaxHeight(frac)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(
-                                        when {
-                                            kcal == 0.0 -> MaterialTheme.colorScheme.surfaceVariant
-                                            over -> MaterialTheme.colorScheme.error
-                                            else -> MaterialTheme.colorScheme.primary
-                                        }
-                                    )
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(
-                            "14 days ago",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            "Today",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-        items(days) { (off, foods) ->
-            val t = foods.totals()
-            AppCard(Modifier.fillMaxWidth().clickable { onOpenDay(off) }) {
-                Row(
-                    Modifier.fillMaxWidth().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(dayTitle(off), fontWeight = FontWeight.Bold)
-                        if (foods.isNotEmpty()) {
-                            Text(
-                                "Sugar ${t.sugar.f1()} g  ·  Fat ${t.fat.f1()} g  ·  Carbs ${t.carbs.f1()} g",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    Text(
-                        if (foods.isEmpty()) "—" else "${t.kcal.f0()} kcal",
-                        fontWeight = FontWeight.Bold,
-                        color = if (goals.kcal > 0 && t.kcal > goals.kcal)
-                            MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-        }
-    }
-}
-
-
 
 // ---------------------------------------------------------------- capture flows
 

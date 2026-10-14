@@ -76,7 +76,7 @@ fun HealthExtrasCard() {
             )
             SwitchRow(
                 "Read sleep, heart rate, workouts, weight",
-                "Also resting heart rate, oxygen, VO2 max, distance, BMR and height if you allow them. " +
+                "Also resting heart rate, blood pressure, oxygen, VO2 max, distance, BMR and height if you allow them. " +
                     "Shown on Burned, and used for a more accurate burn.",
                 readNow
             ) { on ->
@@ -99,7 +99,7 @@ fun HealthExtrasCard() {
                 TextButton(
                     onClick = { message = null; pending = "more"; launcher.launch(HealthExtras.MORE_READ_PERMS) },
                     modifier = Modifier.padding(horizontal = 8.dp)
-                ) { Text("Allow new data: resting heart rate, oxygen, VO2 max, distance, BMR, height") }
+                ) { Text("Allow new data: resting heart rate, blood pressure, oxygen, VO2 max, distance, BMR, height") }
             }
             HorizontalDivider(Modifier.padding(horizontal = 16.dp))
             SwitchRow("Share meals, water, weight", "Written to Health Connect for other apps.", writeNow) { on ->

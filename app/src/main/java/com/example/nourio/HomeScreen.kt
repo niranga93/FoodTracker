@@ -1,6 +1,9 @@
 package com.example.nourio
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
@@ -15,6 +18,7 @@ import com.example.nourio.data.FeaturePrefs
 import com.example.nourio.data.GoalStore
 import com.example.nourio.data.MealDb
 import com.example.nourio.data.ProfileStore
+import com.example.nourio.data.WaterStore
 import com.example.nourio.data.WeightDb
 import com.example.nourio.data.totals
 import com.example.nourio.energy.Body
@@ -28,8 +32,6 @@ import java.text.NumberFormat
 import kotlin.math.abs
 import kotlin.math.ceil
 
-private fun sgn(d: Double) = "%+,.0f".format(d)
-
 @Composable
 private fun Hint(text: String, modifier: Modifier = Modifier, error: Boolean = false) {
     Text(
@@ -41,76 +43,6 @@ private fun Hint(text: String, modifier: Modifier = Modifier, error: Boolean = f
 }
 
 @Composable
-private fun WalkCard(day: DayEnergy?, eaten: Double, body: Body?, dayOffset: Int) {
-    val nf = remember { NumberFormat.getIntegerInstance() }
-    val steps = day?.steps
-    var needed: Long? = null
-    if (day != null && body != null && dayOffset == 0 && eaten > 0 && day.balance > 0) {
-        needed = ceil(day.balance / EnergyModel.kcalPerStep(body)).toLong()
-    }
-    WidgetCard(if (dayOffset == 0) "Walk to balance" else "Steps that day") {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Column {
-                Text("Steps", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(steps?.let { nf.format(it) } ?: "—", style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold)
-            }
-            if (dayOffset == 0) {
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("To go", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(
-                        when {
-                            eaten <= 0 -> "—"
-                            needed == null -> "None"
-                            needed > 15_000 -> "Over days"
-                            else -> "≈ ${nf.format(needed)}"
-                        },
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-        }
-        if (steps != null && needed != null && needed <= 15_000) {
-            Spacer(Modifier.height(10.dp))
-            SlimBar(steps.toFloat() / (steps + needed), false)
-        }
-    }
-}
-
-@Composable
-private fun WeightCardMini(db: MealDb, body: Body?) {
-    val context = LocalContext.current
-    var entries by remember { mutableStateOf(WeightDb(context).all()) }
-    var pace by remember { mutableStateOf<Double?>(null) }
-    var showLog by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        if (body != null) pace = loadForecast(context, db, body).prediction?.weeklyKg
-    }
-    if (showLog) {
-        LogWeightDialog(onDismiss = { showLog = false }, onSaved = { entries = WeightDb(context).all() })
-    }
-
-    WidgetCard("Your weight", trailing = { TextButton(onClick = { showLog = true }) { Text("Log") } }) {
-        if (entries.isEmpty()) {
-            Hint("No entries yet")
-        } else {
-            val values = remember(entries) { EnergyModel.trend(entries.takeLast(30).map { it.kg }) }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(0.4f)) {
-                    Text("${entries.last().kg.f1()} kg", style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold)
-                    pace?.let { Pill("${"%+.1f".format(it)} kg/wk", Modifier.padding(top = 4.dp)) }
-                }
-                Sparkline(values, Modifier.weight(0.6f).height(56.dp))
-            }
-        }
-    }
-}
-
-@Composable
 fun HomeScreen(
     db: MealDb,
     goalStore: GoalStore,
@@ -118,6 +50,7 @@ fun HomeScreen(
     onDayChange: (Int) -> Unit,
     onOpenTab: (NavTab) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenPending: (Long) -> Unit,
     inner: PaddingValues
 ) {
     val context = LocalContext.current
@@ -129,6 +62,8 @@ fun HomeScreen(
     val budget by rememberBudget(db, goalStore, dayOffset)
     var week by remember(dayOffset) { mutableStateOf<List<DayEnergy>>(emptyList()) }   // newest first
     val nf = remember { NumberFormat.getIntegerInstance() }
+    val openPage = LocalOpenPage.current
+    val water = remember { WaterStore(context) }
 
     LaunchedEffect(dayOffset) {
         if (body != null) {
@@ -159,53 +94,45 @@ fun HomeScreen(
             }
         }
 
+        // The day as a report card: overall grade, subject grades, then the teacher's note
+        val report = Grading.report(
+            DayInputs(
+                totals = totals,
+                budgetKcal = goalKcal,
+                goals = goals,
+                weightKg = profile.weightKg,
+                waterMl = water.get(dayOffset),
+                waterGoalMl = water.goalMl,
+                steps = day?.steps,
+                isToday = dayOffset == 0,
+                hourOfDay = Grading.nowHour()
+            )
+        )
         item {
-            WidgetCard(
-                if (dayOffset == 0) "Calories left today" else "Calories left, ${dayTitle(dayOffset)}",
-                trailing = { if (goalKcal > 0) Pill("Budget ${nf.format(goalKcal.toLong())} kcal") }
+            ReportHeader(
+                report = report,
+                name = profile.name,
+                dayOffset = dayOffset,
+                eaten = totals.kcal,
+                budget = goalKcal,
+                burned = day?.burned,
+                onOpenBudget = { openPage("budget:$dayOffset") }
             ) {
-                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    HeroRing(totals.kcal, goalKcal)
-                    Spacer(Modifier.height(16.dp))
-                    val cs = MaterialTheme.colorScheme
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        HeroTile(
-                            "Eaten", nf.format(totals.kcal.toLong()),
-                            cs.primaryContainer, cs.primary, Modifier.weight(1f)
-                        )
-                        HeroTile(
-                            "Burned", day?.let { nf.format(it.burned.toLong()) } ?: "—",
-                            cs.secondaryContainer, cs.secondary, Modifier.weight(1f)
-                        )
-                        HeroTile(
-                            "Balance",
-                            if (day != null && totals.kcal > 0) sgn(totals.kcal - day.burned) else "—",
-                            cs.tertiaryContainer, cs.tertiary, Modifier.weight(1f)
-                        )
-                    }
-                    if (body == null) {
-                        TextButton(onClick = { onOpenTab(NavTab.Profile) }) { Text("Add your details") }
-                    }
-                    val b = budget
-                    if (features.isOn("home_budget") && b != null && b.kcalGoal > 0) {
-                        Expandable("Budget") {
-                            Hint("Base ${b.baseKcal.f0()}  ·  ${sgn(b.carryKcal)} carried")
-                            b.carryNote?.let { Hint(it) }
-                            if (b.agg7.days > 0) {
-                                Hint(
-                                    "7 days: ${abs(b.agg7.underGoal).f0()} kcal " +
-                                        (if (b.agg7.underGoal >= 0) "under" else "over") + " goal"
-                                )
-                            }
-                            b.planMessage?.let { Hint(it, error = true) }
-                        }
+                if (body == null) {
+                    TextButton(onClick = { onOpenTab(NavTab.Profile) }, contentPadding = PaddingValues(0.dp)) {
+                        Text("Add your details for burn and balance")
                     }
                 }
+                budget?.planMessage?.let { Hint(it, error = true) }
             }
         }
-
-        if (features.isOn("home_walk")) item { WalkCard(day, totals.kcal, body, dayOffset) }
-        if (features.isOn("home_week") && week.isNotEmpty()) item { BalanceTrendCard(week) }
-        if (features.isOn("home_weight")) item { WeightCardMini(db, body) }
+        // Photos taken offline: hidden when there are none
+        if (dayOffset == 0) item { PendingMealsCard(onOpenPending) }
+        item { TeacherNoteCard(report, dayOffset == 0) }
+        if (features.isOn("home_walk")) item { MoveCard(day, totals.kcal, body, dayOffset, goals.stepGoal) }
+        if (features.isOn("home_week") && week.isNotEmpty()) item { WeekCard(week, goalKcal) }
+        if (features.isOn("home_weight")) item { WeightOutlookCard(db, body) }
+        // The detailed grades come last, after the dashboard
+        item { SubjectsCard(report) }
     }
 }

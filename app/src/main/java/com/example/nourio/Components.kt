@@ -73,11 +73,6 @@ fun dayTitle(offset: Int): String = when (offset) {
     }
 }
 
-fun dayFull(offset: Int): String {
-    val c = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, offset) }
-    return SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault()).format(c.time)
-}
-
 fun timestampForOffset(offset: Int): Long {
     val c = Calendar.getInstance()
     c.add(Calendar.DAY_OF_YEAR, offset)
@@ -146,43 +141,6 @@ fun SlimBar(progress: Float, over: Boolean, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun CalorieRing(kcal: Double, goal: Double, modifier: Modifier = Modifier) {
-    val track = MaterialTheme.colorScheme.surfaceVariant
-    val over = goal > 0 && kcal > goal
-    val color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-    val target = if (goal > 0) (kcal / goal).toFloat().coerceIn(0f, 1f) else 0f
-    val sweep by animateFloatAsState(targetValue = target, animationSpec = tween(700), label = "ring")
-
-    Box(modifier.size(176.dp), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize()) {
-            val stroke = 16.dp.toPx()
-            val inset = stroke / 2
-            val arc = Size(this.size.width - stroke, this.size.height - stroke)
-            drawArc(
-                color = track, startAngle = 0f, sweepAngle = 360f, useCenter = false,
-                topLeft = Offset(inset, inset), size = arc,
-                style = Stroke(width = stroke, cap = StrokeCap.Round)
-            )
-            if (sweep > 0f) {
-                drawArc(
-                    color = color, startAngle = -90f, sweepAngle = 360f * sweep, useCenter = false,
-                    topLeft = Offset(inset, inset), size = arc,
-                    style = Stroke(width = stroke, cap = StrokeCap.Round)
-                )
-            }
-        }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(kcal.f0(), fontSize = 36.sp, fontWeight = FontWeight.Bold)
-            Text(
-                if (goal > 0) "of ${goal.f0()} kcal" else "kcal",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
 fun StatTile(label: String, value: String, modifier: Modifier = Modifier) {
     Column(
         modifier
@@ -197,25 +155,6 @@ fun StatTile(label: String, value: String, modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-    }
-}
-
-@Composable
-fun LabeledBar(label: String, value: Double, goal: Double, unit: String, decimals: Int) {
-    fun fmt(d: Double) = if (decimals == 0) d.f0() else d.f1()
-    val over = value > goal
-    Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
-            Text(
-                "${fmt(value)} / ${fmt(goal)} $unit" + if (over) "  (over by ${fmt(value - goal)})" else "",
-                style = MaterialTheme.typography.bodySmall,
-                color = if (over) MaterialTheme.colorScheme.error
-                else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Spacer(Modifier.height(4.dp))
-        SlimBar((value / goal).toFloat(), over)
     }
 }
 

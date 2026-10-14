@@ -18,6 +18,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import com.example.nourio.ai.GeminiKeys
+import com.example.nourio.ai.GeminiRouter
 import com.example.nourio.ai.KeyStatus
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -47,6 +48,8 @@ fun GeminiKeyCard() {
     var busy by remember { mutableStateOf(false) }
     var awaiting by remember { mutableStateOf(false) }       // the user went to AI Studio to create a key
     var copiedKey by remember { mutableStateOf<String?>(null) }
+    var models by remember { mutableStateOf<List<String>>(emptyList()) }
+    LaunchedEffect(slots) { models = runCatching { GeminiRouter.models() }.getOrDefault(emptyList()) }
 
     fun saveAndTest(raw: String) {
         val key = raw.trim()
@@ -57,7 +60,7 @@ fun GeminiKeyCard() {
             when {
                 status == KeyStatus.INVALID -> message = "Google rejected this key."
                 status == KeyStatus.OFFLINE -> message = "Couldn't reach Google. Check your connection."
-                !GeminiKeys.save(key) -> message = "Already saved, or all 3 slots are used."
+                !GeminiKeys.save(key) -> message = "Already saved, or all ${GeminiKeys.SLOTS} slots are used."
                 else -> {
                     slots = GeminiKeys.slots()
                     statuses = statuses + (key to status)
@@ -108,7 +111,8 @@ fun GeminiKeyCard() {
         }
     ) {
         Text(
-            "Photo analysis and the coach use your own free key.",
+            "Photo and text analysis and the coach use your own free key. Add up to ${GeminiKeys.SLOTS} keys: " +
+                "requests take turns across them, so you reach the daily free limit less often.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -199,6 +203,26 @@ fun GeminiKeyCard() {
             }
         }
         if (hasUserKey) {
+            Text(
+                "${GeminiKeys.count()} of ${GeminiKeys.SLOTS} keys saved",
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(top = 10.dp)
+            )
+            if (models.isNotEmpty()) {
+                Text(
+                    "Best free model first: " + models.joinToString(", then "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            Text(
+                "Free limits are per Google Cloud project, so keys made in the same project share one limit. " +
+                    "Create each key in its own project to add more.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp)
+            )
             Text(
                 "Stored encrypted on this phone. Not included in backups.",
                 style = MaterialTheme.typography.bodySmall,

@@ -11,8 +11,11 @@ data class Goals(
     val sodiumMg: Double = 0.0,
     val carbs: Double = 0.0,
     val protein: Double = 0.0,
-    val fiber: Double = 0.0
-)
+    val fiber: Double = 0.0,
+    val steps: Double = 0.0              // daily step goal; 0 = the default 10,000
+) {
+    val stepGoal: Long get() = if (steps > 0) steps.toLong() else 10_000L
+}
 
 class GoalStore(context: Context) {
     private val prefs = context.getSharedPreferences("goals", Context.MODE_PRIVATE)
@@ -28,7 +31,8 @@ class GoalStore(context: Context) {
         sodiumMg = d("sodium"),
         carbs = d("carbs"),
         protein = d("protein"),
-        fiber = d("fiber")
+        fiber = d("fiber"),
+        steps = d("steps")
     )
 
     fun save(g: Goals) {
@@ -41,6 +45,7 @@ class GoalStore(context: Context) {
             putFloat("carbs", g.carbs.toFloat())
             putFloat("protein", g.protein.toFloat())
             putFloat("fiber", g.fiber.toFloat())
+            putFloat("steps", g.steps.toFloat())
         }
     }
 }

@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit
 enum class KeyStatus { OK, LIMITED, INVALID, OFFLINE }
 
 object GeminiKeys {
-    private const val SLOTS = 3
+    const val SLOTS = 10
 
     @Volatile private var appContext: Context? = null
 
@@ -48,13 +48,20 @@ object GeminiKeys {
 
     private fun prefs() = appContext?.getSharedPreferences("gemini_user_keys", Context.MODE_PRIVATE)
 
-    /** Three slots, decrypted. Empty slots are null. */
+    // Decrypted slots, kept in memory until a key is saved or removed, so requests skip the Keystore
+    @Volatile private var cache: List<String?>? = null
+
+    /** All slots, decrypted. Empty slots are null. */
     fun slots(): List<String?> {
-        val p = prefs()
+        cache?.let { return it }
+        val p = prefs() ?: return List(SLOTS) { null }
         return (0 until SLOTS).map { i ->
-            p?.getString("k$i", null)?.let { Crypto.decrypt(it) }?.takeIf { it.isNotBlank() }
-        }
+            p.getString("k$i", null)?.let { Crypto.decrypt(it) }?.takeIf { it.isNotBlank() }
+        }.also { cache = it }
     }
+
+    /** How many of the [SLOTS] hold a key. */
+    fun count(): Int = slots().count { it != null }
 
     fun save(key: String): Boolean {
         val p = prefs() ?: return false
@@ -63,6 +70,7 @@ object GeminiKeys {
         val i = current.indexOfFirst { it == null }
         if (i < 0) return false
         p.edit { putString("k$i", Crypto.encrypt(key)) }
+        cache = null
         version++
         refresh()
         return true
@@ -70,6 +78,7 @@ object GeminiKeys {
 
     fun remove(index: Int) {
         prefs()?.edit { remove("k$index") }
+        cache = null
         version++
         refresh()
     }

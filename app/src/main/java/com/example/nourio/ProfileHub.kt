@@ -26,84 +26,6 @@ import com.example.nourio.diet.DietStore
 import com.example.nourio.plan.PlanStore
 import java.util.Calendar
 
-// ---------------------------------------------------------------- the list
-
-@Composable
-fun ProfileHub(onOpenPage: (String) -> Unit, inner: PaddingValues) {
-    val context = LocalContext.current
-    val profile = remember { ProfileStore(context).load() }
-    val goals = remember { GoalStore(context).load() }
-    val plan = remember { PlanStore(context) }
-    val diet = remember { DietStore(context).load() }
-    val latest = remember { WeightDb(context).all().lastOrNull() }
-
-    Column(
-        Modifier.fillMaxSize().padding(inner).verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(56.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    profile.name.trim().take(1).uppercase().ifBlank { "?" },
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
-            Spacer(Modifier.width(14.dp))
-            Text(
-                profile.name.trim().ifBlank { "Profile" },
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        AppCard(Modifier.fillMaxWidth()) {
-            Column {
-                NavRow(
-                    "Personal details",
-                    if (profile.heightCm > 0 && profile.weightKg > 0)
-                        "${profile.heightCm.f0()} cm  ·  ${profile.weightKg.f1()} kg" else "Add details"
-                ) { onOpenPage("me") }
-                HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                NavRow(
-                    "Goals & target",
-                    buildString {
-                        append(if (goals.kcal > 0) "${goals.kcal.f0()} kcal" else "No goal")
-                        if (plan.targetKg > 0) append("  ·  target ${plan.targetKg.f1()} kg")
-                    }
-                ) { onOpenPage("goals") }
-                HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                NavRow(
-                    "Diet & allergies",
-                    (diet.diets.size + diet.allergens.size + diet.other.size).let {
-                        if (it == 0) "None" else "$it selected"
-                    }
-                ) { onOpenPage("diet") }
-                HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                NavRow("Weigh-ins", latest?.let { "${it.kg.f1()} kg" } ?: "No entries") { onOpenPage("weight") }
-            }
-        }
-        AppCard(Modifier.fillMaxWidth()) {
-            Column {
-                NavRow("Connections", "Gemini key, Health Connect, Drive") { onOpenPage("connections") }
-                HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                NavRow("Data & privacy", "Export, policy") { onOpenPage("data") }
-            }
-        }
-        AppCard(Modifier.fillMaxWidth()) {
-            Column {
-                NavRow("Settings", "Turn features on or off") { onOpenPage("settings") }
-                HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                NavRow("About", "Version ${remember { appVersion(context).name }}") { onOpenPage("about") }
-            }
-        }
-    }
-}
-
 // ---------------------------------------------------------------- sub-pages
 
 @Composable
@@ -116,7 +38,12 @@ fun PageScreen(id: String, db: MealDb, goalStore: GoalStore, onBack: () -> Unit)
         "connections" -> "Connections"
         "data" -> "Data & privacy"
         "about" -> "About"
-        else -> "Settings"
+        "insights" -> "Insights & patterns"
+        else -> when {
+            id.startsWith("budget") -> "Your calorie budget"
+            id.startsWith("body") -> "Sleep, heart and vitals"
+            else -> "Settings"
+        }
     }
     Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
         ScreenTopBar(title, onBack)
@@ -139,7 +66,13 @@ fun PageScreen(id: String, db: MealDb, goalStore: GoalStore, onBack: () -> Unit)
                     PrivacyCard()
                 }
                 "about" -> AboutContent()
-                else -> SettingsContent()
+                "insights" -> InsightsPage(db)
+                // "budget:<day offset>", opened from the Home screen for the day shown there
+                else -> if (id.startsWith("body")) {
+                    BodyPage(id.substringAfter(':', "0").toIntOrNull() ?: 0)
+                } else if (id.startsWith("budget")) {
+                    BudgetPage(db, goalStore, id.substringAfter(':', "0").toIntOrNull() ?: 0)
+                } else SettingsContent()
             }
         }
     }

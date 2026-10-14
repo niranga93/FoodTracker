@@ -45,7 +45,8 @@ Start the questionnaire with your email, category **All other app types** (or Re
 Select the features that apply:
 - **Nutrition and weight management** (calorie and nutrient tracking, weight log, weight outlook)
 - **Activity and fitness** (steps, distance, calories burned, workouts, sleep and sleep stages, heart rate and resting heart rate, VO2 max shown from Health Connect)
-- If offered: **Health monitoring / vitals** (blood oxygen is shown for information only, not for diagnosis)
+- If offered: **Health monitoring / vitals** (heart rate, blood pressure and blood oxygen are shown for information and compared with food on the Insights page, not used for diagnosis)
+- **Wellness recommendations**: daily tips based on the user's own data, worked out on the device; accepting one changes an in-app goal
 
 Confirm it is **not a medical device** and does not diagnose or treat anything. The app shows: "Calories, burn, and weight outlook are estimates, not medical advice."
 
@@ -66,6 +67,7 @@ Play asks for a reason per permission, and a video or description of how each is
 | READ_RESTING_HEART_RATE | Shows resting heart rate and its 7-day trend on the Burned page (opt-in switch). |
 | READ_OXYGEN_SATURATION | Shows the day's average blood oxygen on the Burned page, for information only (opt-in switch). |
 | READ_VO2_MAX | Shows the latest VO2 max as a fitness indicator on the Burned page (opt-in switch). |
+| READ_BLOOD_PRESSURE | Compares blood pressure with sodium intake on the Insights page and shows its trend, so the user can see how diet relates to it; analysis runs on the device only (opt-in). |
 | READ_DISTANCE | Shows distance walked or run, and uses it instead of a step-length guess to estimate walking calories (opt-in switch). |
 | WRITE_NUTRITION | Writes each logged meal's calories and nutrients to Health Connect so the user's other health apps can use them (opt-in switch). |
 | WRITE_HYDRATION | Writes the user's daily water total to Health Connect (opt-in switch). |
@@ -101,7 +103,9 @@ All Health Connect data is used only on the device, is not sent to Gemini or any
 ### Security practices summary to double-check against the policy
 - No ads, analytics or tracking SDKs.
 - USDA FoodData Central receives food names; Open Food Facts receives barcodes and search text (no personal data).
-- Health Connect data stays on the device (only weights imported from Health Connect become weigh-ins that are included in the user's own Drive or file backup).
+- Health Connect data stays on the device (only weights and an empty-profile height imported from Health Connect become part of the user's own Drive or file backup).
+- Sleep, heart rate, blood pressure and other Health Connect data used by the Insights page is analysed on the device only, never sent anywhere, and is left out of Android's own device backup (`data_extraction_rules.xml`).
+- Daily tip notifications hide their text on the lock screen.
 
 ---
 

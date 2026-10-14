@@ -4,8 +4,11 @@ import android.content.Context
 import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.BasalMetabolicRateRecord
+import androidx.health.connect.client.records.BloodPressureRecord
 import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.ExerciseSegment
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeightRecord
@@ -42,7 +45,32 @@ import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import kotlin.math.abs
 
-data class Workout(val name: String, val minutes: Long)
+/** One exercise session. minutes excludes pauses; kcal is active calories during it, when recorded. */
+data class Workout(
+    val name: String,
+    val minutes: Long,
+    val start: Instant = Instant.EPOCH,
+    val source: String = "",
+    val kcal: Double? = null
+)
+
+/** Readable name for the app that recorded a session. Other apps' labels are hidden from us on Android 11+. */
+fun sourceAppName(pkg: String): String = when {
+    pkg.startsWith("com.sec.android.app.shealth") -> "Samsung Health"
+    pkg == "com.google.android.apps.fitness" -> "Google Fit"
+    pkg.startsWith("com.google.android.apps.healthdata") -> "Health Connect"
+    pkg.startsWith("com.fitbit") -> "Fitbit"
+    pkg.startsWith("com.garmin") -> "Garmin Connect"
+    pkg.startsWith("com.strava") -> "Strava"
+    pkg.startsWith("com.huawei.health") -> "Huawei Health"
+    pkg.startsWith("com.xiaomi") || pkg.startsWith("com.mi.health") -> "Mi Fitness"
+    pkg.startsWith("com.withings") -> "Withings"
+    pkg.startsWith("com.oura") -> "Oura"
+    pkg.startsWith("com.whoop") -> "Whoop"
+    pkg.startsWith("com.nike") -> "Nike Run Club"
+    pkg.startsWith("com.samsung.android.wear") || pkg.contains("watch") -> "Watch"
+    else -> pkg.substringAfterLast('.').replaceFirstChar { it.uppercase() }
+}
 
 /** Minutes per sleep stage for one night. */
 data class SleepStages(val deep: Long, val rem: Long, val light: Long, val awake: Long) {
@@ -79,7 +107,8 @@ object HealthExtras {
     val P_SPO2 = HealthPermission.getReadPermission(OxygenSaturationRecord::class)
     val P_VO2 = HealthPermission.getReadPermission(Vo2MaxRecord::class)
     val P_DISTANCE = HealthPermission.getReadPermission(DistanceRecord::class)
-    val MORE_READ_PERMS = setOf(P_BMR, P_HEIGHT, P_RESTING_HR, P_SPO2, P_VO2, P_DISTANCE)
+    val P_BLOOD_PRESSURE = HealthPermission.getReadPermission(BloodPressureRecord::class)
+    val MORE_READ_PERMS = setOf(P_BMR, P_HEIGHT, P_RESTING_HR, P_SPO2, P_VO2, P_DISTANCE, P_BLOOD_PRESSURE)
 
     val WRITE_PERMS = setOf(
         HealthPermission.getWritePermission(NutritionRecord::class),
@@ -105,6 +134,31 @@ object HealthExtras {
             ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL -> "Swimming"
             else -> "Workout"
         }
+
+    /** Session length without paused segments. */
+    private fun activeMinutes(r: ExerciseSessionRecord): Long {
+        val paused = r.segments
+            .filter { it.segmentType == ExerciseSegment.EXERCISE_SEGMENT_TYPE_PAUSE }
+            .sumOf { Duration.between(it.startTime, it.endTime).toMinutes() }
+        return (Duration.between(r.startTime, r.endTime).toMinutes() - paused).coerceAtLeast(0)
+    }
+
+    /**
+     * The same walk is often written by two apps (for example a watch app and Samsung Health).
+     * Sessions that overlap by more than half of the shorter one count once; the longer one is kept.
+     */
+    private fun dedupe(sessions: List<ExerciseSessionRecord>): List<ExerciseSessionRecord> {
+        val kept = mutableListOf<ExerciseSessionRecord>()
+        for (s in sessions.sortedByDescending { Duration.between(it.startTime, it.endTime) }) {
+            val dup = kept.any { k ->
+                val overlap = Duration.between(maxOf(k.startTime, s.startTime), minOf(k.endTime, s.endTime))
+                val shorter = minOf(Duration.between(k.startTime, k.endTime), Duration.between(s.startTime, s.endTime))
+                !overlap.isNegative && overlap.toMillis() * 2 > shorter.toMillis()
+            }
+            if (!dup) kept += s
+        }
+        return kept
+    }
 
     private fun stagesOf(sessions: List<SleepSessionRecord>): SleepStages {
         var deep = 0L; var rem = 0L; var light = 0L; var awake = 0L
@@ -153,10 +207,21 @@ object HealthExtras {
         }.getOrNull()
 
         val workouts = runCatching {
-            client.readRecords(ReadRecordsRequest(ExerciseSessionRecord::class, dayRange))
-                .records
-                .map { Workout(exerciseName(it), Duration.between(it.startTime, it.endTime).toMinutes()) }
+            dedupe(client.readRecords(ReadRecordsRequest(ExerciseSessionRecord::class, dayRange)).records)
+                .map { r ->
+                    // Active calories inside the session window; Health Connect already merges apps for totals
+                    val kcal = runCatching {
+                        client.aggregate(
+                            AggregateRequest(
+                                setOf(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL),
+                                TimeRangeFilter.between(r.startTime, r.endTime)
+                            )
+                        )[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories
+                    }.getOrNull()?.takeIf { it >= 1 }
+                    Workout(exerciseName(r), activeMinutes(r), r.startTime, sourceAppName(r.metadata.dataOrigin.packageName), kcal)
+                }
                 .filter { it.minutes > 0 }
+                .sortedBy { it.start }
         }.getOrDefault(emptyList())
 
         val restingHr = if (P_RESTING_HR !in granted) null else runCatching {

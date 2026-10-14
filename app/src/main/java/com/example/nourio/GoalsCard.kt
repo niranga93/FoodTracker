@@ -137,7 +137,8 @@ fun GoalsCard(goalStore: GoalStore, db: MealDb) {
                         Goals(
                             kcal = parse(kcal), sugar = parse(sugar), fat = parse(fat),
                             satFat = parse(satFat), sodiumMg = parse(sodium), carbs = parse(carbs),
-                            protein = parse(protein), fiber = parse(fiber)
+                            protein = parse(protein), fiber = parse(fiber),
+                            steps = goalStore.load().steps     // set from Insights; keep it
                         )
                     )
                     BackupService.autoBackup(context)

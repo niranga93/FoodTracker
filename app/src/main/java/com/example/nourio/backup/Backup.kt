@@ -115,7 +115,7 @@ object DriveApi {
 
     private fun call(request: Request): String =
         http.newCall(request).execute().use { resp ->
-            val body = resp.body?.string().orEmpty()
+            val body = resp.body.string()
             if (!resp.isSuccessful) error("Google Drive error ${resp.code}: ${body.take(200)}")
             body
         }

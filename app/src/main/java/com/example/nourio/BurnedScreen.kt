@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.nourio.data.FeaturePrefs
+import com.example.nourio.data.GoalStore
 import com.example.nourio.data.MealDb
 import com.example.nourio.data.ProfileStore
 import com.example.nourio.data.totals
@@ -119,34 +120,15 @@ fun BurnedScreen(db: MealDb, dayOffset: Int, onDayChange: (Int) -> Unit, inner: 
             }
         } else {
             if (features.isOn("burn_split")) item { BurnSplitCard(day, dayOffset, hasDeviceData) }
-            if (features.isOn("burn_week") && week.isNotEmpty()) {
-                item {
-                    WidgetCard(
-                        "Eaten vs burned",
-                        trailing = {
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                LegendDot(MaterialTheme.colorScheme.primary, "Eaten")
-                                LegendDot(MaterialTheme.colorScheme.secondary, "Burned")
-                            }
-                        }
-                    ) { EatenBurnedChart(week) }
-                }
-            }
-            if (features.isOn("burn_steps")) item { StepsChartCard(week) }
-            if (features.isOn("burn_outlook")) item { OutlookCard(db) }
+            if (features.isOn("burn_week") && week.isNotEmpty()) item { EatenBurnedCard(week) }
+            if (features.isOn("burn_steps")) item { StepsCard(week, remember { GoalStore(context).load().stepGoal }) }
             bodyDays?.let { d ->
-                if (features.isOn("burn_sleep") && d.any { it.sleepMinutes != null }) item { SleepCard(d, dayOffset) }
-                if (features.isOn("burn_heart") && d.any { it.hrAvg != null || it.restingHr != null }) {
-                    item { HeartRateCard(d) }
-                }
                 val first = d.first()
-                if (features.isOn("burn_vitals") && (first.vo2max != null || first.spo2 != null || first.distanceKm != null)) {
-                    item { VitalsCard(first, dayOffset) }
-                }
                 if (features.isOn("burn_workouts") && first.workouts.isNotEmpty()) {
                     item { WorkoutsCard(first, dayOffset) }
                 }
             }
+            if (features.isOn("burn_outlook")) item { OutlookCard(db) }
             item {
                 Expandable("Source data") {
                     ActivityCard(dayOffset)

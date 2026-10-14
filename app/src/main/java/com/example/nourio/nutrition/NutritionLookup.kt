@@ -124,7 +124,7 @@ object NutritionLookup {
         for (attempt in 0 until 4) {
             try {
                 client.newCall(Request.Builder().url(url).build()).execute().use { resp ->
-                    val raw = resp.body?.string().orEmpty()
+                    val raw = resp.body.string()
                     if (resp.isSuccessful) return raw
                     lastError = "USDA HTTP ${resp.code}"
                     // Retry only temporary errors; fail fast on bad key etc.

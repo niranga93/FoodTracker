@@ -14,42 +14,48 @@ Log meals by photo or barcode. Track calories, nutrients, burn and weight.
 
 ## Full description (max 4000)
 ```
-Nourio helps you see what you eat and burn, without the clutter.
+Nourio helps you eat better and move more, with a clear daily report card and tips built from your own data.
+
+YOUR DAILY REPORT CARD
+- An overall grade for the day, plus a grade for calories, protein, fiber, sugar, fat, sodium, water and steps
+- A short note on what went well and the one thing to work on next
+- Fair during the day: minimums are graded against the time of day
 
 LOG MEALS YOUR WAY
 - Take a photo or pick one from your gallery
 - Type or speak what you ate
-- Scan a barcode or search packaged products
+- Scan a barcode or search packaged products, with Nutri-Score, NOVA group and allergens
 - Share a photo, a recipe link or a meal note into the app
 - Re-log favorites and recent foods in one tap
 
-SEE THE WHOLE DAY
-- Calories left today, with a daily budget
-- Carbs, protein, fat, sugar, fiber and sodium against your limits
-- Water, meal timing and your biggest items
-- Nutri-Score, NOVA group, additives and allergens for packaged foods
+A DASHBOARD THAT MOTIVATES
+- Calories left today, with a budget that adapts to your target weight
+- Move: your steps, what they burned, and how many minutes of walking would balance the day
+- This week: deficit and surplus day by day, averages and your best day
+- Weight outlook: your trend, a 30-day projection and the date you'd reach your target
+
+INSIGHTS FROM YOUR OWN DATA
+- Finds links between food, sleep, steps, heart rate, blood pressure and weight, for example whether you eat more after short nights
+- Spots trends, like a resting heart rate that is creeping up
+- A daily tip with a one-tap Accept that updates your goals
+- All analysis happens on your phone
 
 CONNECT YOUR HEALTH DATA
-- Steps and calories burned from Health Connect
-- Optional: sleep, heart rate, workouts and weight from your watch or smart scale
-- Optional: share your meals, water and weight back to Health Connect
-
-FOLLOW YOUR TREND
-- Eaten vs burned over the last week
-- A weight outlook based on what you eat and burn
-- Diet and allergy warnings
+- Steps, calories burned, sleep and sleep stages, heart rate, VO2 max, blood oxygen and weight from Health Connect
+- Uses your watch's basal metabolic rate and distance for a more accurate burn
+- Optionally share your meals, water and weight back to Health Connect
 
 YOUR DATA STAYS YOURS
 - Your log is stored on your phone. No account, no ads, no tracking
 - Optional backup to a private folder in your own Google Drive, or to a file you keep
 - Photo and text analysis uses Google Gemini with your own free key
 
-Nourio gives estimates, not medical advice. Allergen warnings are best effort, so always check labels. Ask a doctor or dietitian about health decisions.
+Nourio gives estimates and general wellness tips, not medical advice. Allergen warnings are best effort, so always check labels. Ask a doctor or dietitian about health decisions.
 ```
 
 ## Release notes for 1.0.0 (max 500)
 ```
-First release of Nourio.
+First release of Nourio: daily report card, smart dashboard, insights from your own data with daily tips, and Health Connect sync.
 ```
 
 ## Categorization

@@ -41,7 +41,7 @@ object OpenFoodFacts {
         for (attempt in 0 until 3) {
             try {
                 client.newCall(request).execute().use { resp ->
-                    val body = resp.body?.string().orEmpty()
+                    val body = resp.body.string()
                     when {
                         resp.isSuccessful -> return body
                         resp.code == 404 -> return null

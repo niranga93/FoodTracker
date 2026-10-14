@@ -4,12 +4,18 @@ import android.content.Context
 import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.BasalMetabolicRateRecord
+import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.HeightRecord
 import androidx.health.connect.client.records.HydrationRecord
 import androidx.health.connect.client.records.MealType
 import androidx.health.connect.client.records.NutritionRecord
+import androidx.health.connect.client.records.OxygenSaturationRecord
+import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
+import androidx.health.connect.client.records.Vo2MaxRecord
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.AggregateRequest
@@ -38,21 +44,42 @@ import kotlin.math.abs
 
 data class Workout(val name: String, val minutes: Long)
 
+/** Minutes per sleep stage for one night. */
+data class SleepStages(val deep: Long, val rem: Long, val light: Long, val awake: Long) {
+    val any get() = deep + rem + light > 0
+}
+
 data class DayBody(
     val sleepMinutes: Long?,
     val hrAvg: Long?,
     val hrMin: Long?,
     val hrMax: Long?,
-    val workouts: List<Workout>
+    val workouts: List<Workout>,
+    // Optional types: null when not recorded or not allowed
+    val stages: SleepStages? = null,
+    val restingHr: Long? = null,
+    val spo2: Double? = null,               // average %, that day
+    val vo2max: Double? = null,             // latest in the 30 days up to that day, mL/kg/min
+    val distanceKm: Double? = null
 )
 
 object HealthExtras {
+    // The set the read switch first asked for. Kept unchanged so existing users keep their data.
     val READ_PERMS = setOf(
         HealthPermission.getReadPermission(SleepSessionRecord::class),
         HealthPermission.getReadPermission(HeartRateRecord::class),
         HealthPermission.getReadPermission(ExerciseSessionRecord::class),
         HealthPermission.getReadPermission(WeightRecord::class)
     )
+
+    // Added later and optional: each one is read only when it was allowed
+    val P_BMR = HealthPermission.getReadPermission(BasalMetabolicRateRecord::class)
+    val P_HEIGHT = HealthPermission.getReadPermission(HeightRecord::class)
+    val P_RESTING_HR = HealthPermission.getReadPermission(RestingHeartRateRecord::class)
+    val P_SPO2 = HealthPermission.getReadPermission(OxygenSaturationRecord::class)
+    val P_VO2 = HealthPermission.getReadPermission(Vo2MaxRecord::class)
+    val P_DISTANCE = HealthPermission.getReadPermission(DistanceRecord::class)
+    val MORE_READ_PERMS = setOf(P_BMR, P_HEIGHT, P_RESTING_HR, P_SPO2, P_VO2, P_DISTANCE)
 
     val WRITE_PERMS = setOf(
         HealthPermission.getWritePermission(NutritionRecord::class),
@@ -79,44 +106,128 @@ object HealthExtras {
             else -> "Workout"
         }
 
-    /** Sleep counts for the day you wake up: sessions between 6 pm the evening before and 6 pm that day. */
-    suspend fun readDayBody(client: HealthConnectClient, offset: Int): DayBody {
+    private fun stagesOf(sessions: List<SleepSessionRecord>): SleepStages {
+        var deep = 0L; var rem = 0L; var light = 0L; var awake = 0L
+        for (s in sessions) for (st in s.stages) {
+            val m = Duration.between(st.startTime, st.endTime).toMinutes()
+            when (st.stage) {
+                SleepSessionRecord.STAGE_TYPE_DEEP -> deep += m
+                SleepSessionRecord.STAGE_TYPE_REM -> rem += m
+                SleepSessionRecord.STAGE_TYPE_LIGHT, SleepSessionRecord.STAGE_TYPE_SLEEPING -> light += m
+                SleepSessionRecord.STAGE_TYPE_AWAKE, SleepSessionRecord.STAGE_TYPE_AWAKE_IN_BED -> awake += m
+            }
+        }
+        return SleepStages(deep, rem, light, awake)
+    }
+
+    /**
+     * Sleep counts for the day you wake up: sessions between 6 pm the evening before and 6 pm that day.
+     * [granted] decides which of the optional types are read.
+     */
+    suspend fun readDayBody(client: HealthConnectClient, offset: Int, granted: Set<String>): DayBody {
         val zone = ZoneId.systemDefault()
         val day = LocalDate.now(zone).plusDays(offset.toLong())
         val start = day.atStartOfDay(zone).toInstant()
         val end = day.plusDays(1).atStartOfDay(zone).toInstant()
-        val sleepFrom = day.minusDays(1).atTime(18, 0).atZone(zone).toInstant()
-        val sleepTo = day.atTime(18, 0).atZone(zone).toInstant()
+        val dayRange = TimeRangeFilter.between(start, end)
+        val sleepRange = TimeRangeFilter.between(
+            day.minusDays(1).atTime(18, 0).atZone(zone).toInstant(),
+            day.atTime(18, 0).atZone(zone).toInstant()
+        )
 
         val sleep = runCatching {
             client.aggregate(
-                AggregateRequest(setOf(SleepSessionRecord.SLEEP_DURATION_TOTAL), TimeRangeFilter.between(sleepFrom, sleepTo))
+                AggregateRequest(setOf(SleepSessionRecord.SLEEP_DURATION_TOTAL), sleepRange)
             )[SleepSessionRecord.SLEEP_DURATION_TOTAL]?.toMinutes()
         }.getOrNull()?.takeIf { it > 0 }
 
+        // Stages come with the same sleep permission, when the watch records them
+        val stages = if (sleep == null) null else runCatching {
+            stagesOf(client.readRecords(ReadRecordsRequest(SleepSessionRecord::class, sleepRange)).records)
+        }.getOrNull()?.takeIf { it.any }
+
         val hr = runCatching {
             client.aggregate(
-                AggregateRequest(
-                    setOf(HeartRateRecord.BPM_AVG, HeartRateRecord.BPM_MIN, HeartRateRecord.BPM_MAX),
-                    TimeRangeFilter.between(start, end)
-                )
+                AggregateRequest(setOf(HeartRateRecord.BPM_AVG, HeartRateRecord.BPM_MIN, HeartRateRecord.BPM_MAX), dayRange)
             )
         }.getOrNull()
 
         val workouts = runCatching {
-            client.readRecords(ReadRecordsRequest(ExerciseSessionRecord::class, TimeRangeFilter.between(start, end)))
+            client.readRecords(ReadRecordsRequest(ExerciseSessionRecord::class, dayRange))
                 .records
                 .map { Workout(exerciseName(it), Duration.between(it.startTime, it.endTime).toMinutes()) }
                 .filter { it.minutes > 0 }
         }.getOrDefault(emptyList())
+
+        val restingHr = if (P_RESTING_HR !in granted) null else runCatching {
+            client.aggregate(AggregateRequest(setOf(RestingHeartRateRecord.BPM_AVG), dayRange))[RestingHeartRateRecord.BPM_AVG]
+        }.getOrNull()
+
+        val spo2 = if (P_SPO2 !in granted) null else runCatching {
+            client.readRecords(ReadRecordsRequest(OxygenSaturationRecord::class, dayRange)).records
+                .map { it.percentage.value }.filter { it in 50.0..100.0 }.takeIf { it.isNotEmpty() }?.average()
+        }.getOrNull()
+
+        val vo2 = if (P_VO2 !in granted) null else runCatching {
+            client.readRecords(
+                ReadRecordsRequest(
+                    Vo2MaxRecord::class,
+                    TimeRangeFilter.between(start.minus(30, ChronoUnit.DAYS), end),
+                    ascendingOrder = false, pageSize = 1
+                )
+            ).records.firstOrNull()?.vo2MillilitersPerMinuteKilogram
+        }.getOrNull()
+
+        val distance = if (P_DISTANCE !in granted) null else runCatching {
+            client.aggregate(AggregateRequest(setOf(DistanceRecord.DISTANCE_TOTAL), dayRange))[DistanceRecord.DISTANCE_TOTAL]
+                ?.inKilometers
+        }.getOrNull()?.takeIf { it > 0.01 }
 
         return DayBody(
             sleepMinutes = sleep,
             hrAvg = hr?.get(HeartRateRecord.BPM_AVG),
             hrMin = hr?.get(HeartRateRecord.BPM_MIN),
             hrMax = hr?.get(HeartRateRecord.BPM_MAX),
-            workouts = workouts
+            workouts = workouts,
+            stages = stages,
+            restingHr = restingHr,
+            spo2 = spo2,
+            vo2max = vo2,
+            distanceKm = distance
         )
+    }
+
+    /**
+     * Basal metabolic rate and height from a watch, scale or health app.
+     * BMR feeds the burn estimate; height only fills an empty profile field, never overwrites one.
+     */
+    suspend fun importBodyMeasurements(context: Context, client: HealthConnectClient, granted: Set<String>) {
+        val prefs = HealthPrefs(context)
+        val now = Instant.now()
+        if (P_BMR in granted) {
+            val latest = client.readRecords(
+                ReadRecordsRequest(
+                    BasalMetabolicRateRecord::class,
+                    TimeRangeFilter.between(now.minus(30, ChronoUnit.DAYS), now),
+                    ascendingOrder = false, pageSize = 1
+                )
+            ).records.firstOrNull()
+            prefs.deviceBmr = latest?.basalMetabolicRate?.inKilocaloriesPerDay?.takeIf { it in 800.0..4000.0 } ?: 0.0
+        }
+        if (P_HEIGHT in granted) {
+            val store = ProfileStore(context)
+            val profile = store.load()
+            if (profile.heightCm <= 0) {
+                val cm = client.readRecords(
+                    ReadRecordsRequest(
+                        HeightRecord::class,
+                        TimeRangeFilter.between(now.minus(3650, ChronoUnit.DAYS), now),
+                        ascendingOrder = false, pageSize = 1
+                    )
+                ).records.firstOrNull()?.height?.inMeters?.times(100)
+                if (cm != null && cm in 100.0..250.0) store.save(profile.copy(heightCm = cm))
+            }
+        }
     }
 
     /** Smart-scale and other-app weights become weigh-ins. Each Health Connect record is imported once. */
@@ -312,6 +423,10 @@ object HealthSync {
         // Import first, so imported weights are known before anything is written
         if (prefs.readExtras && granted.containsAll(HealthExtras.READ_PERMS)) {
             HealthExtras.importWeights(context, client)
+            runCatching { HealthExtras.importBodyMeasurements(context, client, granted) }
+                .onFailure { Log.w("HealthSync", "body measurements failed", it) }
+        } else {
+            prefs.deviceBmr = 0.0          // reading switched off: stop using the device's BMR
         }
         if (prefs.writeSync && granted.containsAll(HealthExtras.WRITE_PERMS)) {
             val db = MealDb(context)

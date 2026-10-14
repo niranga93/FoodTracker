@@ -22,6 +22,11 @@ class HealthPrefs(context: Context) {
         get() = p.getBoolean("writeSync", false)
         set(v) = p.edit { putBoolean("writeSync", v) }
 
+    // Latest basal metabolic rate from Health Connect, kcal/day. 0 = none.
+    var deviceBmr: Double
+        get() = p.getFloat("deviceBmr", 0f).toDouble()
+        set(v) = p.edit { putFloat("deviceBmr", v.toFloat()) }
+
     // Bookkeeping for the two-way sync. The pushed sets hold "id:fingerprint", so only changes are sent.
     var pushedMealIds: Set<String>
         get() = set("pushedMealIds")

@@ -31,6 +31,7 @@ class FeaturePrefs(context: Context) {
             Feature("burn_outlook", "Where your weight is heading", "30-day outlook", "Burned"),
             Feature("burn_sleep", "Sleep", "Last 7 nights", "Burned"),
             Feature("burn_heart", "Heart rate", "Daily range", "Burned"),
+            Feature("burn_vitals", "Fitness and vitals", "VO2 max, blood oxygen, distance", "Burned"),
             Feature("burn_workouts", "Workouts", "Sessions that day", "Burned"),
 
             Feature("diet", "Diet warnings", "Diets and allergies", "Smart")

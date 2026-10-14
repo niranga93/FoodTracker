@@ -115,6 +115,7 @@ class MainActivity : ComponentActivity() {
         NutritionLookup.init(applicationContext)
         PortionStore.init(applicationContext)
         BackupService.init(applicationContext)
+        com.example.nourio.energy.EnergyRepo.init(applicationContext)
         com.example.nourio.ai.GeminiKeys.init(applicationContext)
         if (savedInstanceState == null) {
             openPendingFrom(intent)

@@ -8,7 +8,14 @@ enum class BurnSource(val label: String) {
     BMR_ONLY("resting estimate only (no activity data)")
 }
 
-data class Body(val weightKg: Double, val heightCm: Double, val age: Int, val sex: String)
+/** deviceBmr: basal metabolic rate from a watch via Health Connect, kcal/day, used instead of the formula. */
+data class Body(
+    val weightKg: Double,
+    val heightCm: Double,
+    val age: Int,
+    val sex: String,
+    val deviceBmr: Double? = null
+)
 
 data class DayEnergy(
     val offset: Int,            // 0 = today, -1 = yesterday ...
@@ -60,7 +67,7 @@ object EnergyModel {
     fun stepKm(b: Body): Double = b.heightCm * STEP_LENGTH_FACTOR / 100_000.0
 
     /** Mifflin-St Jeor resting energy expenditure, kcal/day. */
-    fun bmr(b: Body): Double {
+    fun formulaBmr(b: Body): Double {
         val s = when (b.sex) {
             "Male" -> 5.0
             "Female" -> -161.0
@@ -69,17 +76,35 @@ object EnergyModel {
         return (10.0 * b.weightKg + 6.25 * b.heightCm - 5.0 * b.age + s).coerceAtLeast(800.0)
     }
 
+    /** True when the device's BMR is used: it must be within 25% of the formula to rule out bad readings. */
+    fun usesDeviceBmr(b: Body): Boolean {
+        val d = b.deviceBmr ?: return false
+        val f = formulaBmr(b)
+        return d in (0.75 * f)..(1.25 * f)
+    }
+
+    /** Resting energy expenditure, kcal/day: the device's measured BMR when plausible, otherwise the formula. */
+    fun bmr(b: Body): Double = if (usesDeviceBmr(b)) b.deviceBmr!! else formulaBmr(b)
+
     /** Net walking energy for a number of steps. */
     fun stepKcal(steps: Long, b: Body): Double {
         val stepKm = b.heightCm * STEP_LENGTH_FACTOR / 100_000.0
         return steps * stepKm * b.weightKg * WALK_KCAL_PER_KG_KM
     }
 
+    /** Walking energy from the distance a device measured, more accurate than a step-length guess. */
+    private fun walkKcal(steps: Long?, distanceKm: Double?, b: Body): Double = when {
+        distanceKm != null && distanceKm > 0 -> distanceKm * b.weightKg * WALK_KCAL_PER_KG_KM
+        steps != null && steps > 0 -> stepKcal(steps, b)
+        else -> 0.0
+    }
+
     fun estimateBurn(
         body: Body,
         steps: Long?,
         activeKcal: Double?,
-        deviceTotal: Double?
+        deviceTotal: Double?,
+        distanceKm: Double? = null
     ): BurnEstimate {
         val bmr = bmr(body)
         val resting = bmr * RESTING_FACTOR
@@ -93,7 +118,7 @@ object EnergyModel {
             // No active calories reported. A total this close to resting looks like a resting-only
             // figure, so add the steps estimate on top.
             if (total < 1.2 * bmr) {
-                val extra = if (steps != null && steps > 0) stepKcal(steps, body) else 0.0
+                val extra = walkKcal(steps, distanceKm, body)
                 val source = if (extra > 0) BurnSource.DEVICE_RESTING_PLUS_STEPS else BurnSource.DEVICE_TOTAL
                 return BurnEstimate(total + extra, source, total)
             }
@@ -103,8 +128,9 @@ object EnergyModel {
         if (activeKcal != null && activeKcal > 0) {
             return BurnEstimate(resting + activeKcal, BurnSource.BMR_PLUS_ACTIVITY, resting)
         }
-        if (steps != null && steps > 0) {
-            return BurnEstimate(resting + stepKcal(steps, body), BurnSource.BMR_PLUS_STEPS, resting)
+        val walk = walkKcal(steps, distanceKm, body)
+        if (walk > 0) {
+            return BurnEstimate(resting + walk, BurnSource.BMR_PLUS_STEPS, resting)
         }
         return BurnEstimate(resting, BurnSource.BMR_ONLY, resting)
     }

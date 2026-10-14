@@ -23,6 +23,7 @@ import com.example.nourio.data.totals
 import com.example.nourio.energy.BurnSource
 import com.example.nourio.energy.CalibrationStore
 import com.example.nourio.energy.DayEnergy
+import com.example.nourio.energy.EnergyModel
 import com.example.nourio.energy.EnergyRepo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -135,16 +136,25 @@ fun BurnedScreen(db: MealDb, dayOffset: Int, onDayChange: (Int) -> Unit, inner: 
             if (features.isOn("burn_outlook")) item { OutlookCard(db) }
             bodyDays?.let { d ->
                 if (features.isOn("burn_sleep") && d.any { it.sleepMinutes != null }) item { SleepCard(d, dayOffset) }
-                if (features.isOn("burn_heart") && d.any { it.hrAvg != null }) item { HeartRateCard(d) }
-                if (features.isOn("burn_workouts") && d.first().workouts.isNotEmpty()) {
-                    item { WorkoutsCard(d.first(), dayOffset) }
+                if (features.isOn("burn_heart") && d.any { it.hrAvg != null || it.restingHr != null }) {
+                    item { HeartRateCard(d) }
+                }
+                val first = d.first()
+                if (features.isOn("burn_vitals") && (first.vo2max != null || first.spo2 != null || first.distanceKm != null)) {
+                    item { VitalsCard(first, dayOffset) }
+                }
+                if (features.isOn("burn_workouts") && first.workouts.isNotEmpty()) {
+                    item { WorkoutsCard(first, dayOffset) }
                 }
             }
             item {
                 Expandable("Source data") {
                     ActivityCard(dayOffset)
                     Text(
-                        "Resting burn comes from your profile. Activity comes from Health Connect or your steps. " +
+                        (if (EnergyModel.usesDeviceBmr(body))
+                            "Resting burn uses the basal metabolic rate from your watch (${body.deviceBmr!!.f0()} kcal a day). "
+                        else "Resting burn comes from your profile. ") +
+                            "Activity comes from Health Connect, or from your steps and distance. " +
                             "Estimates can be off by 10 to 20%.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

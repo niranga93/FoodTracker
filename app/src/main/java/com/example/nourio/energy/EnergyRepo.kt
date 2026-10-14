@@ -4,12 +4,26 @@ import android.content.Context
 import androidx.health.connect.client.HealthConnectClient
 import com.example.nourio.data.Profile
 import com.example.nourio.health.DayActivity
+import com.example.nourio.health.HealthExtras
 import com.example.nourio.health.HealthPrefs
 import com.example.nourio.health.HealthRepo
 import java.time.LocalDate
 import java.util.Calendar
 
 object EnergyRepo {
+    @Volatile private var appContext: Context? = null
+
+    fun init(context: Context) {
+        appContext = context.applicationContext
+    }
+
+    /** BMR from Health Connect, only while reading is switched on. */
+    private fun deviceBmr(): Double? {
+        val ctx = appContext ?: return null
+        val prefs = HealthPrefs(ctx)
+        if (!prefs.enabled || !prefs.readExtras) return null
+        return prefs.deviceBmr.takeIf { it > 0 }
+    }
 
     /** Returns a Body, or null plus a message explaining what's missing. */
     fun body(profile: Profile): Pair<Body?, String?> {
@@ -20,7 +34,7 @@ object EnergyRepo {
         if (age < 18) {
             return null to "Calorie balance estimates are only available for adults (18+)."
         }
-        return Body(profile.weightKg, profile.heightCm, age, profile.sex) to null
+        return Body(profile.weightKg, profile.heightCm, age, profile.sex, deviceBmr()) to null
     }
 
     private val activityCache = HashMap<String, Pair<Long, DayActivity>>()
@@ -35,7 +49,9 @@ object EnergyRepo {
         if (HealthConnectClient.getSdkStatus(context) != HealthConnectClient.SDK_AVAILABLE) return emptyMap()
         if (!HealthPrefs(context).enabled) return emptyMap()
         val client = HealthConnectClient.getOrCreate(context)
-        if (!runCatching { HealthRepo.hasPermissions(client) }.getOrDefault(false)) return emptyMap()
+        val granted = runCatching { client.permissionController.getGrantedPermissions() }.getOrDefault(emptySet())
+        if (!granted.containsAll(HealthRepo.PERMISSIONS)) return emptyMap()
+        val withDistance = HealthExtras.P_DISTANCE in granted
 
         val out = HashMap<Int, DayActivity>()
         val now = System.currentTimeMillis()
@@ -46,7 +62,7 @@ object EnergyRepo {
             if (hit != null && now - hit.first < ttl) {
                 out[o] = hit.second
             } else {
-                runCatching { HealthRepo.readDay(client, o) }.onSuccess {
+                runCatching { HealthRepo.readDay(client, o, withDistance) }.onSuccess {
                     out[o] = it
                     synchronized(activityCache) { activityCache[key] = now to it }
                 }
@@ -59,7 +75,7 @@ object EnergyRepo {
         val steps = act?.steps?.takeIf { it > 0 }
         val active = act?.activeKcal?.takeIf { it > 0 }
         val total = act?.totalKcal?.takeIf { it > 0 }
-        val est = EnergyModel.estimateBurn(body, steps, active, total)
+        val est = EnergyModel.estimateBurn(body, steps, active, total, act?.distanceKm?.takeIf { it > 0 })
         return DayEnergy(
             offset = offset,
             eaten = eaten,

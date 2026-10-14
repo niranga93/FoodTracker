@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -19,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
+import com.example.nourio.energy.EnergyRepo
 import com.example.nourio.health.HealthExtras
 import com.example.nourio.health.HealthPrefs
 import com.example.nourio.health.HealthSync
@@ -46,6 +48,12 @@ fun HealthExtrasCard() {
         PermissionController.createRequestPermissionResultContract()
     ) { result ->
         granted = granted + result
+        EnergyRepo.clearCache()                         // newly allowed types (distance) count at once
+        if (pending == "more") {
+            message = if (granted.containsAll(HealthExtras.MORE_READ_PERMS)) "Allowed." else "Some were not allowed. That's fine."
+            HealthSync.runAsync(context)
+            return@rememberLauncherForActivityResult
+        }
         val needed = if (pending == "read") HealthExtras.READ_PERMS else HealthExtras.WRITE_PERMS
         val ok = granted.containsAll(needed)
         if (pending == "read") { prefs.readExtras = ok; readOn = ok } else { prefs.writeSync = ok; writeOn = ok }
@@ -55,6 +63,8 @@ fun HealthExtrasCard() {
 
     val readNow = readOn && granted.containsAll(HealthExtras.READ_PERMS)
     val writeNow = writeOn && granted.containsAll(HealthExtras.WRITE_PERMS)
+    // Turned on before these types existed, or some were declined: offer them separately
+    val missingMore = readNow && !granted.containsAll(HealthExtras.MORE_READ_PERMS)
 
     AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(vertical = 8.dp)) {
@@ -64,17 +74,32 @@ fun HealthExtrasCard() {
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
-            SwitchRow("Read sleep, heart rate, workouts, weight", "Shown on Burned. Weight fills your weigh-ins.", readNow) { on ->
+            SwitchRow(
+                "Read sleep, heart rate, workouts, weight",
+                "Also resting heart rate, oxygen, VO2 max, distance, BMR and height if you allow them. " +
+                    "Shown on Burned, and used for a more accurate burn.",
+                readNow
+            ) { on ->
                 message = null
                 if (on) {
                     pending = "read"
                     if (granted.containsAll(HealthExtras.READ_PERMS)) {
                         prefs.readExtras = true; readOn = true
                         HealthSync.runAsync(context)
-                    } else launcher.launch(HealthExtras.READ_PERMS)
+                        if (!granted.containsAll(HealthExtras.MORE_READ_PERMS)) {
+                            pending = "more"; launcher.launch(HealthExtras.MORE_READ_PERMS)
+                        }
+                    } else launcher.launch(HealthExtras.READ_PERMS + HealthExtras.MORE_READ_PERMS)
                 } else {
                     prefs.readExtras = false; readOn = false
+                    EnergyRepo.clearCache()
                 }
+            }
+            if (missingMore) {
+                TextButton(
+                    onClick = { message = null; pending = "more"; launcher.launch(HealthExtras.MORE_READ_PERMS) },
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                ) { Text("Allow new data: resting heart rate, oxygen, VO2 max, distance, BMR, height") }
             }
             HorizontalDivider(Modifier.padding(horizontal = 16.dp))
             SwitchRow("Share meals, water, weight", "Written to Health Connect for other apps.", writeNow) { on ->

@@ -18,6 +18,7 @@ import com.example.nourio.data.FeaturePrefs
 import com.example.nourio.data.GoalStore
 import com.example.nourio.data.MealDb
 import com.example.nourio.data.ProfileStore
+import com.example.nourio.data.Totals
 import com.example.nourio.data.WaterStore
 import com.example.nourio.data.WeightDb
 import com.example.nourio.data.totals
@@ -58,7 +59,7 @@ fun HomeScreen(
     val profile = remember { ProfileStore(context).load() }
     val (body, _) = remember { EnergyRepo.body(profile) }
     val goals = remember { goalStore.load() }
-    val totals = remember(dayOffset) { loadDay(db, dayOffset).flatMap { it.items }.totals() }
+    var totals by remember(dayOffset) { mutableStateOf(Totals()) }
     val budget by rememberBudget(db, goalStore, dayOffset)
     var week by remember(dayOffset) { mutableStateOf<List<DayEnergy>>(emptyList()) }   // newest first
     val nf = remember { NumberFormat.getIntegerInstance() }
@@ -66,12 +67,14 @@ fun HomeScreen(
     val water = remember { WaterStore(context) }
 
     LaunchedEffect(dayOffset) {
+        totals = withContext(Dispatchers.IO) { loadDay(db, dayOffset).flatMap { it.items }.totals() }
         if (body != null) {
             val offs = (0..6).map { dayOffset - it }
             val acts = EnergyRepo.activityFor(context, offs)
             val factor = CalibrationStore(context).factor
+            val mealsByOffset = withContext(Dispatchers.IO) { loadDays(db, offs) }
             week = offs.map { off ->
-                val kcal = withContext(Dispatchers.IO) { loadDay(db, off).flatMap { it.items }.totals().kcal }
+                val kcal = mealsByOffset[off].orEmpty().flatMap { it.items }.totals().kcal
                 val raw = EnergyRepo.build(body, off, kcal, acts[off])
                 raw.copy(burned = raw.burned * factor)
             }
@@ -129,6 +132,7 @@ fun HomeScreen(
         // Photos taken offline: hidden when there are none
         if (dayOffset == 0) item { PendingMealsCard(onOpenPending) }
         item { TeacherNoteCard(report, dayOffset == 0) }
+        if (features.isOn("home_fast")) item { com.example.nourio.fasting.FastingCard(db, dayOffset) }
         if (features.isOn("home_walk")) item { MoveCard(day, totals.kcal, body, dayOffset, goals.stepGoal) }
         if (features.isOn("home_week") && week.isNotEmpty()) item { WeekCard(week, goalKcal) }
         if (features.isOn("home_weight")) item { WeightOutlookCard(db, body) }

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
@@ -123,6 +124,11 @@ fun ProfileHub(db: MealDb, onOpenPage: (String) -> Unit, inner: PaddingValues) {
                 Icons.Filled.Search, Violet, "Insights & patterns",
                 "How food, sleep, activity and heart data connect"
             ) { onOpenPage("insights") }
+            Divider()
+            IconRow(
+                Icons.Filled.Refresh, MaterialTheme.colorScheme.secondary, "Fasting",
+                "Your fasts, eating window and what they do for you"
+            ) { onOpenPage("fasting") }
             Divider()
             IconRow(
                 Icons.Filled.Favorite, Pink, "Sleep, heart rate and vitals",

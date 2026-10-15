@@ -277,7 +277,7 @@ private fun TipCard(tip: Tip, onAccept: () -> Unit, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun RelationshipCard(r: Relationship) {
+fun RelationshipCard(r: Relationship) {
     val cs = MaterialTheme.colorScheme
     val color = when {
         abs(r.rho) >= 0.6 -> cs.primary

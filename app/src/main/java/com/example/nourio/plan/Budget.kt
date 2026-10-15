@@ -39,7 +39,8 @@ suspend fun computeBudget(context: Context, db: MealDb, goalStore: GoalStore, da
     val offsets = (1..30).map { dayOffset - it }
     val acts = EnergyRepo.activityFor(context, offsets)
     val totalsByOffset = withContext(Dispatchers.IO) {
-        offsets.associateWith { off -> loadDay(db, off).flatMap { it.items }.totals() }
+        val mealsByOffset = com.example.nourio.loadDays(db, offsets)
+        offsets.associateWith { off -> mealsByOffset[off].orEmpty().flatMap { it.items }.totals() }
     }
     val days = if (body == null) emptyList() else offsets.map { off ->
         val raw = EnergyRepo.build(body, off, totalsByOffset.getValue(off).kcal, acts[off])

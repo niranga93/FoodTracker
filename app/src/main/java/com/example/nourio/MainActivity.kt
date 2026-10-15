@@ -124,7 +124,11 @@ class MainActivity : ComponentActivity() {
             handleShare(intent)
         }
         // Photos queued offline get another chance whenever the app starts
-        if (PendingMeals.all(this).any { it.status == PendingStatus.WAITING }) AnalyzePendingWorker.enqueue(this)
+        lifecycleScope.launch(Dispatchers.IO) {
+            if (PendingMeals.all(this@MainActivity).any { it.status == PendingStatus.WAITING }) {
+                AnalyzePendingWorker.enqueue(this@MainActivity)
+            }
+        }
 
         val action = intent?.action
         if (action == "androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" ||
@@ -138,7 +142,7 @@ class MainActivity : ComponentActivity() {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     var showSplash by rememberSaveable { mutableStateOf(true) }
                     LaunchedEffect(Unit) {
-                        delay(1400)
+                        delay(200)
                         showSplash = false
                     }
                     val guide by Onboarding.visible.collectAsStateWithLifecycle()

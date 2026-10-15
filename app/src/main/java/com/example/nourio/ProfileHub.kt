@@ -40,6 +40,7 @@ fun PageScreen(id: String, db: MealDb, goalStore: GoalStore, onBack: () -> Unit)
         "data" -> "Data & privacy"
         "about" -> "About"
         "insights" -> "Insights & patterns"
+        "fasting" -> "Fasting"
         else -> when {
             id.startsWith("budget") -> "Your calorie budget"
             id.startsWith("body") -> "Sleep, heart and vitals"
@@ -68,6 +69,7 @@ fun PageScreen(id: String, db: MealDb, goalStore: GoalStore, onBack: () -> Unit)
                 }
                 "about" -> AboutContent()
                 "insights" -> InsightsPage(db)
+                "fasting" -> com.example.nourio.fasting.FastingPage(db)
                 // "budget:<day offset>", opened from the Home screen for the day shown there
                 else -> if (id.startsWith("body")) {
                     BodyPage(id.substringAfter(':', "0").toIntOrNull() ?: 0)

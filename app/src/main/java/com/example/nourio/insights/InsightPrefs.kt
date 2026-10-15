@@ -5,6 +5,7 @@ import androidx.core.content.edit
 import com.example.nourio.data.GoalStore
 import com.example.nourio.data.ProfileStore
 import com.example.nourio.data.WaterStore
+import com.example.nourio.fasting.FastingPrefs
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -84,7 +85,8 @@ object InsightGoals {
             waterMl = WaterStore(context).goalMl.toDouble(),
             steps = g.stepGoal.toDouble(),
             sleepH = InsightPrefs(context).sleepGoalH,
-            weightKg = weight
+            weightKg = weight,
+            fastH = FastingPrefs(context).goalH
         )
     }
 
@@ -101,6 +103,7 @@ object InsightGoals {
                 GoalField.STEPS -> store.save(g.copy(steps = c.to))
                 GoalField.WATER -> WaterStore(context).goalMl = c.to.toInt()
                 GoalField.SLEEP -> InsightPrefs(context).sleepGoalH = c.to
+                GoalField.FAST -> FastingPrefs(context).goalH = c.to
             }
         }
         val prefs = InsightPrefs(context)

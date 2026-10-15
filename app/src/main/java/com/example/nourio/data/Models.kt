@@ -70,8 +70,8 @@ data class PortionEstimate(
 const val AI_ESTIMATE = "AI estimate"
 
 data class Totals(
-    val kcal: Double, val protein: Double, val fat: Double, val satFat: Double,
-    val carbs: Double, val sugar: Double, val fiber: Double, val sodium: Double,
+    val kcal: Double = 0.0, val protein: Double = 0.0, val fat: Double = 0.0, val satFat: Double = 0.0,
+    val carbs: Double = 0.0, val sugar: Double = 0.0, val fiber: Double = 0.0, val sodium: Double = 0.0,
     val addedSugar: Double = 0.0
 ) {
     /** Sugar inside fruit, vegetables and milk. No guideline limits it. */

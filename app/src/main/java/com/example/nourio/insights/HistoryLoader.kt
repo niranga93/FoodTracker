@@ -16,6 +16,7 @@ import com.example.nourio.data.WaterStore
 import com.example.nourio.data.WeightDb
 import com.example.nourio.data.totals
 import com.example.nourio.energy.EnergyRepo
+import com.example.nourio.fasting.Fasting
 import com.example.nourio.health.HealthExtras
 import com.example.nourio.health.HealthPrefs
 import com.example.nourio.health.HealthRepo
@@ -40,6 +41,7 @@ object HistoryLoader {
 
         // Food: intake measures only count on days with a full log
         val start = first.atStartOfDay(zone).toInstant().toEpochMilli()
+        val loggedDays = HashSet<LocalDate>()
         val end = today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
         db.between(start, end).groupBy { Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate() }
             .forEach { (date, meals) ->
@@ -55,7 +57,17 @@ object HistoryLoader {
                 v[Metric.SODIUM] = t.sodium
                 val last = Instant.ofEpochMilli(meals.maxOf { it.timestamp }).atZone(zone)
                 v[Metric.LAST_MEAL] = last.hour + last.minute / 60.0
+                loggedDays += date
             }
+
+        // Fasting: the overnight fast counts when both days around it are fully logged, so the gap is real
+        val fastDays = Fasting.days(Fasting.eatingTimes(db.between(start, end)), first, today, zone)
+        fastDays.forEach { d ->
+            val v = values[d.date] ?: return@forEach
+            if (d.date !in loggedDays) return@forEach
+            if (d.date.minusDays(1) in loggedDays) d.fastH?.let { v[Metric.FAST] = it }
+            if (d.meals >= 2) d.windowH?.let { v[Metric.EATING_WINDOW] = it }
+        }
 
         // Water: finished days only
         val water = WaterStore(context).allDays()

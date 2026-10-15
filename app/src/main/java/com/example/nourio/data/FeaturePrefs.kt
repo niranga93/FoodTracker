@@ -13,6 +13,7 @@ class FeaturePrefs(context: Context) {
 
     companion object {
         val ALL = listOf(
+            Feature("home_fast", "Fasting", "Time since your last meal and your eating window", "Home"),
             Feature("home_walk", "Move today", "Steps, activity burn and a walk to balance", "Home"),
             Feature("home_week", "This week", "Day-by-day deficit and surplus", "Home"),
             Feature("home_weight", "Weight outlook", "Trend, 30-day outlook, target date", "Home"),

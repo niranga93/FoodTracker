@@ -18,6 +18,8 @@ enum class Metric(val label: String, val unit: String, val better: Int) {
     SODIUM("Sodium", "mg", -1),
     WATER("Water", "ml", +1),
     LAST_MEAL("Last meal of the day", "h", -1),       // hour of day, e.g. 21.5
+    FAST("Overnight fast", "h", 0),                   // hours from the last meal to the first meal of the day
+    EATING_WINDOW("Eating window", "h", 0),           // first to last meal
     STEPS("Steps", "", +1),
     SLEEP("Sleep", "h", +1),
     RESTING_HR("Resting heart rate", "bpm", -1),
@@ -29,7 +31,7 @@ enum class Metric(val label: String, val unit: String, val better: Int) {
 
     fun format(v: Double): String = when (this) {
         LAST_MEAL -> clock(v)
-        SLEEP -> "${(v).let { "%.1f".format(it) }} h"
+        SLEEP, FAST, EATING_WINDOW -> "${(v).let { "%.1f".format(it) }} h"
         WEIGHT, WEIGHT_CHANGE -> "%.1f kg".format(v)
         STEPS -> "%,d steps".format(v.roundToLong())
         else -> "%,d %s".format(v.roundToLong(), unit)
@@ -37,7 +39,7 @@ enum class Metric(val label: String, val unit: String, val better: Int) {
 
     companion object {
         /** Intake metrics only mean something on days with a full food log. */
-        val INTAKE = setOf(KCAL, PROTEIN, FIBER, SUGAR, SAT_FAT, SODIUM, LAST_MEAL)
+        val INTAKE = setOf(KCAL, PROTEIN, FIBER, SUGAR, SAT_FAT, SODIUM, LAST_MEAL, FAST, EATING_WINDOW)
 
         fun clock(h: Double): String {
             val hh = h.toInt().coerceIn(0, 23)
@@ -62,9 +64,10 @@ enum class GoalField(val label: String, val unit: String) {
     PROTEIN("Protein goal", "g"),
     WATER("Water goal", "ml"),
     STEPS("Step goal", "steps"),
-    SLEEP("Sleep goal", "h");
+    SLEEP("Sleep goal", "h"),
+    FAST("Fasting goal", "h");
 
-    fun format(v: Double) = if (this == SLEEP) "%.1f h".format(v) else "%,d %s".format(v.roundToLong(), unit)
+    fun format(v: Double) = if (this == SLEEP || this == FAST) "%.0f h".format(v) else "%,d %s".format(v.roundToLong(), unit)
 }
 
 data class GoalChange(val field: GoalField, val from: Double, val to: Double) {
@@ -106,7 +109,8 @@ data class Trend(
 /** The current goals, as the engine needs them. 0 = not set. */
 data class CurrentGoals(
     val sodiumMg: Double, val sugar: Double, val fiber: Double, val protein: Double,
-    val waterMl: Double, val steps: Double, val sleepH: Double, val weightKg: Double
+    val waterMl: Double, val steps: Double, val sleepH: Double, val weightKg: Double,
+    val fastH: Double = 14.0
 )
 
 data class Analysis(
@@ -135,9 +139,10 @@ object InsightEngine {
         val x: Metric,
         val y: Metric,
         val nextDay: Boolean,
-        val expectedSign: Int,
+        val expectedSign: Int,               // 0: either way is worth knowing (fasting)
         val describe: (lowX: Double, highX: Double, yLow: Double, yHigh: Double, splitAt: Double) -> String,
-        val tip: (CurrentGoals, Double) -> Tip?
+        val tip: (CurrentGoals, Double) -> Tip?,
+        val signedTip: ((g: CurrentGoals, split: Double, yLow: Double, yHigh: Double) -> Tip?)? = null
     )
 
     private fun n0(v: Double) = "%,d".format(v.roundToLong())
@@ -182,8 +187,59 @@ object InsightEngine {
                 "Protein-rich days keep you fuller the next day.", GoalChange(GoalField.PROTEIN, g.protein, roundTo(g.protein * 1.1, 5.0))) }),
         Hypothesis("kcal-weight", Metric.KCAL, Metric.WEIGHT_CHANGE, false, +1,
             { _, _, yLow, yHigh, split -> "After days over ${n0(split)} kcal your weight was about ${"%.1f".format(yHigh - yLow)} kg higher the next morning." },
+            { _, _ -> null }),
+
+        // Fasting. Either direction is reported: some people eat less after a long fast, others make up for it.
+        Hypothesis("fast-kcal", Metric.FAST, Metric.KCAL, false, 0,
+            { _, _, yLow, yHigh, split ->
+                if (yHigh < yLow) "On days after an overnight fast of ${h1(split)} or more you ate about ${n0(yLow - yHigh)} kcal less."
+                else "On days after an overnight fast of ${h1(split)} or more you ate about ${n0(yHigh - yLow)} kcal more. Long fasts may be leading to bigger meals."
+            },
+            { _, _ -> null },
+            { g, split, yLow, yHigh -> fastKcalTip(g, split, yHigh < yLow) }),
+        Hypothesis("fast-weight", Metric.FAST, Metric.WEIGHT_CHANGE, false, 0,
+            { _, _, yLow, yHigh, split ->
+                if (yHigh < yLow) "After an overnight fast of ${h1(split)} or more, your weight the next morning was about ${kg(yLow - yHigh)} lower than after shorter fasts."
+                else "After an overnight fast of ${h1(split)} or more, your weight the next morning was about ${kg(yHigh - yLow)} higher than after shorter fasts."
+            },
+            { _, _ -> null },
+            { g, split, yLow, yHigh -> if (yHigh < yLow) fastGoalTip("fast-weight", g, split,
+                "Your longer fasts go with lower weight the next morning.") else null }),
+        Hypothesis("window-kcal", Metric.EATING_WINDOW, Metric.KCAL, false, 0,
+            { _, _, yLow, yHigh, split ->
+                if (yHigh > yLow) "On days you ate over more than ${h1(split)} you ate about ${n0(yHigh - yLow)} kcal more."
+                else "Your calories hardly rise with a longer eating window: on longer days you ate about ${n0(yLow - yHigh)} kcal less."
+            },
+            { _, _ -> null },
+            { g, split, yLow, yHigh -> if (yHigh > yLow) Tip("window-kcal", "Eat within a shorter window",
+                "Long eating days are bigger eating days for you. Try to fit your meals into ${h1(split)} or less.",
+                if (g.fastH < 24 - split) GoalChange(GoalField.FAST, g.fastH, fastGoalFor(24 - split)) else null) else null }),
+        Hypothesis("window-weight", Metric.EATING_WINDOW, Metric.WEIGHT_CHANGE, false, 0,
+            { _, _, yLow, yHigh, split ->
+                if (yHigh > yLow) "On days you ate over more than ${h1(split)} your weight was about ${kg(yHigh - yLow)} higher the next morning."
+                else "A longer eating window doesn't push your weight up: the next morning it was about ${kg(yLow - yHigh)} lower."
+            },
             { _, _ -> null })
     )
+
+    private fun h1(v: Double) = "%.1f h".format(v)
+    private fun kg(v: Double) = "%.1f kg".format(v)
+
+    /** The nearest fasting goal (12 to 20 h) at or above [h]. */
+    private fun fastGoalFor(h: Double) = listOf(12.0, 14.0, 16.0, 18.0, 20.0).firstOrNull { it >= h - 0.25 } ?: 20.0
+
+    private fun fastGoalTip(id: String, g: CurrentGoals, split: Double, why: String): Tip {
+        val target = fastGoalFor(split)
+        return Tip(id, "Longer overnight fasts suit you", "$why Aim for about ${h1(target)} between dinner and your first meal.",
+            if (target > g.fastH) GoalChange(GoalField.FAST, g.fastH, target) else null)
+    }
+
+    private fun fastKcalTip(g: CurrentGoals, split: Double, lessAfterFast: Boolean): Tip =
+        if (lessAfterFast) fastGoalTip("fast-kcal", g, split, "You eat less on days after a longer fast.")
+        else Tip("fast-overeat", "Don't let long fasts turn into big meals",
+            "You tend to eat more after long fasts. Break the fast with protein and fiber (eggs, yogurt, beans, " +
+                "vegetables), or try a shorter fast.",
+            if (g.fastH > 12) GoalChange(GoalField.FAST, g.fastH, g.fastH - 2) else null)
 
     private fun roundTo(v: Double, step: Double) = (v / step).roundToInt() * step
 
@@ -254,7 +310,7 @@ object InsightEngine {
             if (p.size < MIN_PAIRS) return@mapNotNull null
             val rho = spearman(p.map { it.first }, p.map { it.second })
             if (abs(rho) < MIN_RHO || tStat(rho, p.size) < MIN_T) return@mapNotNull null
-            if (rho * h.expectedSign <= 0) return@mapNotNull null
+            if (h.expectedSign != 0 && rho * h.expectedSign <= 0) return@mapNotNull null
             // Effect size: average y in the lower half of x versus the upper half
             val split = p.map { it.first }.sorted()[p.size / 2]
             val low = p.filter { it.first < split }.map { it.second }
@@ -266,13 +322,14 @@ object InsightEngine {
                 h.id, h.x, h.y, h.nextDay, rho, p.size,
                 h.describe(lx, hx, low.average(), high.average(), split), p
             )
-            rel to h.tip(goals, split)
+            rel to (h.signedTip?.invoke(goals, split, low.average(), high.average()) ?: h.tip(goals, split))
         }.sortedByDescending { abs(it.first.rho) }
 
     private val TREND_THRESHOLD = mapOf(
         Metric.SLEEP to 0.33, Metric.RESTING_HR to 2.0, Metric.STEPS to 1000.0, Metric.SYSTOLIC to 4.0,
         Metric.KCAL to 150.0, Metric.SODIUM to 300.0, Metric.SUGAR to 8.0, Metric.FIBER to 4.0,
-        Metric.PROTEIN to 10.0, Metric.WATER to 300.0, Metric.WEIGHT to 0.5
+        Metric.PROTEIN to 10.0, Metric.WATER to 300.0, Metric.WEIGHT to 0.5,
+        Metric.FAST to 1.0, Metric.EATING_WINDOW to 1.0
     )
 
     /** Last 14 days against the 14 before, for each measure with at least 5 days in both halves. */
@@ -326,6 +383,12 @@ object InsightEngine {
             "You averaged ${"%.1f".format(sleep.average())} h of sleep this week. Under 7 h makes cravings and overeating more likely.",
             if (g.sleepH < 7.0) GoalChange(GoalField.SLEEP, g.sleepH, 7.0) else null
         )
+        val fasts = week.mapNotNull { it[Metric.FAST] }
+        if (fasts.size >= 5 && fasts.count { it >= g.fastH } >= 5) out += Tip(
+            "fast-week-${g.fastH.roundToLong()}", "Steady fasting rhythm",
+            "You reached your ${h1(g.fastH)} overnight fast on ${fasts.count { it >= g.fastH }} of the last ${fasts.size} days. " +
+                "A regular rhythm matters more than a longer fast.", null
+        )
         return out
     }
 
@@ -334,6 +397,8 @@ object InsightEngine {
             t.metric == Metric.SODIUM && t.good == false -> sodiumTip("sodium-trend", g, "Your sodium is up ${n0(t.change)} mg a day compared with two weeks before.")
             t.metric == Metric.SUGAR && t.good == false && g.sugar > 0 -> Tip("sugar-trend", "Added sugar is creeping up",
                 "You're eating ${n0(t.change)} g more added sugar a day than two weeks ago.", GoalChange(GoalField.SUGAR, g.sugar, roundTo(g.sugar * 0.9, 5.0)))
+            t.metric == Metric.EATING_WINDOW && t.change >= 1.5 -> Tip("window-trend", "Your eating window is getting longer",
+                "You're eating over ${h1(t.recent)} a day, up from ${h1(t.before)} two weeks ago. Late snacks are the usual cause.", null)
             t.metric == Metric.RESTING_HR && t.good == true -> Tip("rhr-improving", "Your fitness is improving",
                 "Your resting heart rate dropped ${n0(-t.change)} bpm in two weeks. Whatever you're doing, keep going!", null)
             t.metric == Metric.RESTING_HR && t.good == false -> Tip("rhr-rising", "Your resting heart rate is up",

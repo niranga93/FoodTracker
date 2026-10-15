@@ -411,11 +411,28 @@ private fun NutrientRow(label: String, value: Double, unit: String, goal: Double
     }
 }
 
+/** Total sugar, then its two parts: added (with the limit) and natural (no limit in any guideline). */
+@Composable
+private fun SugarRows(t: Totals, addedGoal: Double) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text("Sugar", style = MaterialTheme.typography.bodyMedium)
+        Text("${t.sugar.f1()} g", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    Column(Modifier.padding(start = 16.dp)) {
+        NutrientRow("Added", t.addedSugar, "g", addedGoal, NutrientKind.LIMIT)
+        Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Natural", style = MaterialTheme.typography.bodyMedium)
+            Text("${t.naturalSugar.f1()} g  ·  no limit", style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
 /** Every tracked nutrient. Rows with a goal get a progress bar. */
 @Composable
 fun NutrientsCard(t: Totals, g: Goals, sugarGoal: Double, fatGoal: Double) {
     WidgetCard("Nutrients today") {
-        NutrientRow("Sugar", t.sugar, "g", sugarGoal, NutrientKind.LIMIT)
+        SugarRows(t, sugarGoal)
         NutrientRow("Fat", t.fat, "g", fatGoal, NutrientKind.LIMIT)
         NutrientRow("Saturated fat", t.satFat, "g", g.satFat, NutrientKind.LIMIT)
         NutrientRow("Carbs", t.carbs, "g", g.carbs, NutrientKind.LIMIT)

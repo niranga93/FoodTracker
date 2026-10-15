@@ -20,7 +20,8 @@ object NutritionLookup {
         val description: String,
         val kcal: Double, val protein: Double, val fat: Double,
         val satFat: Double, val carbs: Double, val sugar: Double,
-        val fiber: Double, val sodiumMg: Double
+        val fiber: Double, val sodiumMg: Double,
+        val addedSugar: Double? = null     // null when the source doesn't list it
     )
 
     // Try generic foods first, then fall back to everything (branded included)
@@ -113,7 +114,8 @@ object NutritionLookup {
             carbs = g(1005),
             sugar = sugarByName ?: g(2000, 1063),
             fiber = g(1079),
-            sodiumMg = g(1093)
+            sodiumMg = g(1093),
+            addedSugar = map[1235]             // "Sugars, added": mostly branded foods
         )
     }
 

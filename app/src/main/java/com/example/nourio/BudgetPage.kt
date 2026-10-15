@@ -148,9 +148,9 @@ fun BudgetPage(db: MealDb, goalStore: GoalStore, dayOffset: Int) {
             if (b.baseSugar > 0) {
                 val cut = b.baseSugar - b.sugarGoal
                 Step(
-                    "Sugar", "${totals.sugar.f0()} of ${b.sugarGoal.f0()} g",
+                    "Added sugar", "${totals.addedSugar.f0()} of ${b.sugarGoal.f0()} g",
                     if (cut >= 0.5) "${cut.f0()} g lower than usual because you went over yesterday." else null,
-                    over = totals.sugar > b.sugarGoal
+                    over = totals.addedSugar > b.sugarGoal
                 )
             }
             if (b.baseFat > 0) {

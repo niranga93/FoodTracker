@@ -8,12 +8,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GradingTest {
-    private val goals = Goals(kcal = 2000.0, sugar = 50.0, fat = 70.0, satFat = 20.0, sodiumMg = 2300.0,
+    private val goals = Goals(kcal = 2000.0, addedSugar = 50.0, fat = 70.0, satFat = 20.0, sodiumMg = 2300.0,
         carbs = 260.0, protein = 100.0, fiber = 30.0)
 
     private fun totals(kcal: Double, protein: Double = 100.0, fiber: Double = 30.0, sugar: Double = 40.0,
                        fat: Double = 60.0, satFat: Double = 15.0, sodium: Double = 2000.0) =
-        Totals(kcal, protein, fat, satFat, 250.0, sugar, fiber, sodium)
+        Totals(kcal, protein, fat, satFat, 250.0, sugar, fiber, sodium, addedSugar = sugar)
 
     private fun inputs(t: Totals, today: Boolean = false, hour: Double = 22.0, water: Int = 2000, steps: Long? = 10_000) =
         DayInputs(t, 2000.0, goals, 75.0, water, 2000, steps, today, hour)

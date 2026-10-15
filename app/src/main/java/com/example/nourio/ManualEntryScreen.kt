@@ -73,6 +73,7 @@ fun ManualEntryScreen(
     var qName by rememberSaveable { mutableStateOf("") }
     var qKcal by rememberSaveable { mutableStateOf("") }
     var qSugar by rememberSaveable { mutableStateOf("") }
+    var qAdded by rememberSaveable { mutableStateOf("") }      // empty = guess from the name
     var qFat by rememberSaveable { mutableStateOf("") }
     var qCarbs by rememberSaveable { mutableStateOf("") }
     var qProtein by rememberSaveable { mutableStateOf("") }
@@ -128,7 +129,8 @@ fun ManualEntryScreen(
                 carbs100 = toNum(qCarbs),
                 sugar100 = toNum(qSugar),
                 fiber100 = 0.0,
-                sodium100 = 0.0
+                sodium100 = 0.0,
+                addedSugar100 = qAdded.takeIf { it.isNotBlank() }?.let { toNum(it).coerceAtMost(toNum(qSugar)) }
             ) else null
         }
         1 -> {
@@ -145,7 +147,8 @@ fun ManualEntryScreen(
                 carbs100 = p.carbs,
                 sugar100 = p.sugar,
                 fiber100 = p.fiber,
-                sodium100 = p.sodiumMg
+                sodium100 = p.sodiumMg,
+                addedSugar100 = p.addedSugar
             ) else null
         }
         3 -> packagedItem
@@ -221,6 +224,13 @@ fun ManualEntryScreen(
                         modifier = Modifier.weight(1f)
                     )
                 }
+                OutlinedTextField(
+                    value = qAdded, onValueChange = { qAdded = it },
+                    label = { Text("Of the sugar, added (optional)") }, suffix = { Text("g") }, singleLine = true,
+                    supportingText = { Text("On labels as \"Includes added sugars\". Empty: Nourio estimates it.") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             1 -> Column(Modifier.weight(1f).padding(16.dp)) {

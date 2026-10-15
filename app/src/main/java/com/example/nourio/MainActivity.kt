@@ -118,6 +118,7 @@ class MainActivity : ComponentActivity() {
         com.example.nourio.energy.EnergyRepo.init(applicationContext)
         com.example.nourio.insights.InsightWorker.schedule(applicationContext)     // daily tip, keeps an existing schedule
         com.example.nourio.ai.GeminiKeys.init(applicationContext)
+        Onboarding.init(applicationContext)                                        // the setup guide on the first start
         if (savedInstanceState == null) {
             openPendingFrom(intent)
             handleShare(intent)
@@ -140,8 +141,14 @@ class MainActivity : ComponentActivity() {
                         delay(1400)
                         showSplash = false
                     }
-                    Crossfade(targetState = showSplash, label = "splash") { splash ->
-                        if (splash) SplashScreen() else FoodApp()
+                    val guide by Onboarding.visible.collectAsStateWithLifecycle()
+                    val page = when { showSplash -> 0; guide -> 1; else -> 2 }
+                    Crossfade(targetState = page, label = "splash") {
+                        when (it) {
+                            0 -> SplashScreen()
+                            1 -> OnboardingScreen(onDone = { Onboarding.finish(applicationContext) })
+                            else -> FoodApp()
+                        }
                     }
                 }
             }
@@ -1110,7 +1117,7 @@ fun ItemRow(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "Sugar ${food.sugar.f1()} g",
+                        "Sugar ${food.sugar.f1()} g (added ${food.addedSugar.f1()} g)",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

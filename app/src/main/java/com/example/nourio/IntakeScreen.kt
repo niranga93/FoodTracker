@@ -40,7 +40,7 @@ fun IntakeScreen(
     var toDelete by remember { mutableStateOf<Meal?>(null) }
     val totals = remember(meals) { meals.flatMap { it.items }.totals() }
     val timeFmt = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
-    val sugarGoal = budget?.sugarGoal ?: goals.sugar
+    val sugarGoal = budget?.sugarGoal ?: goals.addedSugar
     val fatGoal = budget?.fatGoal ?: goals.fat
 
     toDelete?.let { meal ->

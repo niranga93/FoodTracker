@@ -176,6 +176,7 @@ object OpenFoodFacts {
             sugar100 = or0(v("sugars_100g")),
             fiber100 = or0(v("fiber_100g")),
             sodium100 = sodiumMg,
+            addedSugar100 = v("added-sugars_100g").takeIf { !it.isNaN() },
             tags = tags.toList()
         )
         return OffProduct(

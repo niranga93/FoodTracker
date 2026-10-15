@@ -26,7 +26,8 @@ class FoodCache(context: Context) : SQLiteOpenHelper(context, "food_cache.db", n
                     kcal = o.getDouble("kcal"), protein = o.getDouble("protein"),
                     fat = o.getDouble("fat"), satFat = o.getDouble("satFat"),
                     carbs = o.getDouble("carbs"), sugar = o.getDouble("sugar"),
-                    fiber = o.getDouble("fiber"), sodiumMg = o.getDouble("sodiumMg")
+                    fiber = o.getDouble("fiber"), sodiumMg = o.getDouble("sodiumMg"),
+                    addedSugar = if (o.isNull("addedSugar")) null else o.optDouble("addedSugar").takeIf { !it.isNaN() }
                 )
             }.getOrNull()
         }
@@ -39,6 +40,7 @@ class FoodCache(context: Context) : SQLiteOpenHelper(context, "food_cache.db", n
             .put("fat", v.fat).put("satFat", v.satFat)
             .put("carbs", v.carbs).put("sugar", v.sugar)
             .put("fiber", v.fiber).put("sodiumMg", v.sodiumMg)
+            .put("addedSugar", v.addedSugar ?: JSONObject.NULL)
             .toString()
         val values = ContentValues().apply {
             put("key", key)

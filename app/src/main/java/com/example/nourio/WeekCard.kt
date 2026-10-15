@@ -53,7 +53,7 @@ private fun summaryText(s: WeekStats): String = buildString {
     appendLine("Days logged: ${s.daysLogged} of 7")
     appendLine(
         "Average per logged day: ${nf.format(s.avgKcal.toLong())} kcal, " +
-            "sugar ${s.avgSugar.f1()} g, fat ${s.avgFat.f1()} g"
+            "added sugar ${s.avgSugar.f1()} g, fat ${s.avgFat.f1()} g"
     )
     appendLine(
         "Calories from: carbs ${(s.carbsShare * 100).f0()}%, " +
@@ -110,7 +110,7 @@ fun WeekCard(db: MealDb) {
             stats = WeekStats(
                 daysLogged = logged.size,
                 avgKcal = logged.sumOf { it.second.kcal } / n,
-                avgSugar = logged.sumOf { it.second.sugar } / n,
+                avgSugar = logged.sumOf { it.second.addedSugar } / n,
                 avgFat = logged.sumOf { it.second.fat } / n,
                 carbsShare = share(carbsKcal),
                 proteinShare = share(proteinKcal),
@@ -161,7 +161,7 @@ fun WeekCard(db: MealDb) {
                         )
                     }
                     Spacer(Modifier.height(6.dp))
-                    InfoLine("Per logged day: sugar ${s.avgSugar.f1()} g  ·  fat ${s.avgFat.f1()} g")
+                    InfoLine("Per logged day: added sugar ${s.avgSugar.f1()} g  ·  fat ${s.avgFat.f1()} g")
                     InfoLine(
                         "Calories from carbs ${(s.carbsShare * 100).f0()}%  ·  " +
                             "protein ${(s.proteinShare * 100).f0()}%  ·  fat ${(s.fatShare * 100).f0()}%"

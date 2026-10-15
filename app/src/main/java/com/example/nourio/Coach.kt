@@ -100,13 +100,13 @@ private suspend fun buildPrompt(context: Context, db: MealDb, goalStore: GoalSto
             )
         }
         appendLine(
-            "Totals: ${t.kcal.f0()} kcal, sugar ${t.sugar.f1()} g, fat ${t.fat.f1()} g " +
+            "Totals: ${t.kcal.f0()} kcal, sugar ${t.sugar.f1()} g (added ${t.addedSugar.f1()} g), fat ${t.fat.f1()} g " +
                 "(saturated ${t.satFat.f1()} g), carbs ${t.carbs.f1()} g, protein ${t.protein.f1()} g, " +
                 "fiber ${t.fiber.f1()} g, sodium ${t.sodium.f0()} mg"
         )
         val limits = buildList {
             if (goals.kcal > 0) add("calories ${goals.kcal.f0()}")
-            if (goals.sugar > 0) add("sugar ${goals.sugar.f0()} g")
+            if (goals.addedSugar > 0) add("added sugar ${goals.addedSugar.f0()} g (natural sugar in fruit, vegetables and milk has no limit)")
             if (goals.fat > 0) add("fat ${goals.fat.f0()} g")
         }
         if (limits.isNotEmpty()) appendLine("User's own daily maximums: ${limits.joinToString(", ")}")
@@ -288,7 +288,7 @@ private fun buildWeekPrompt(context: Context, db: MealDb, goalStore: GoalStore):
             val t = meals.flatMap { it.items }.totals()
             appendLine(
                 "${dayFmt.format(date)}: ${t.kcal.f0()} kcal, protein ${t.protein.f0()} g, carbs ${t.carbs.f0()} g, " +
-                    "fat ${t.fat.f0()} g, sugar ${t.sugar.f0()} g, fiber ${t.fiber.f0()} g, sodium ${t.sodium.f0()} mg, " +
+                    "fat ${t.fat.f0()} g, sugar ${t.sugar.f0()} g (added ${t.addedSugar.f0()} g), fiber ${t.fiber.f0()} g, sodium ${t.sodium.f0()} mg, " +
                     "water ${nf.format(water.get(off))} ml"
             )
             meals.forEach { m ->
@@ -300,7 +300,7 @@ private fun buildWeekPrompt(context: Context, db: MealDb, goalStore: GoalStore):
         }
         val limits = buildList {
             if (goals.kcal > 0) add("calories ${goals.kcal.f0()}")
-            if (goals.sugar > 0) add("sugar ${goals.sugar.f0()} g")
+            if (goals.addedSugar > 0) add("added sugar ${goals.addedSugar.f0()} g (natural sugar in fruit, vegetables and milk has no limit)")
             if (goals.fat > 0) add("fat ${goals.fat.f0()} g")
         }
         if (limits.isNotEmpty()) appendLine("User's own daily maximums: ${limits.joinToString(", ")}")

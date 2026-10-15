@@ -130,9 +130,9 @@ object Grading {
                 if (fs >= 1) if (d.isToday && share < 1) "On track for the time of day." else "Goal reached."
                 else "${n(fTarget - t.fiber)} g behind. Add vegetables, fruit, beans or whole grains."
             )
-            if (d.goals.sugar > 0) out += limitSubject(
-                SubjectKind.SUGAR, "Sugar", t.sugar, d.goals.sugar, "g",
-                "Swap sweet drinks and snacks for fruit or nuts."
+            if (d.goals.addedSugar > 0) out += limitSubject(
+                SubjectKind.SUGAR, "Added sugar", t.addedSugar, d.goals.addedSugar, "g",
+                "Swap sweet drinks, juice and snacks for whole fruit, yogurt or nuts."
             )
             if (d.goals.fat > 0) out += limitSubject(
                 SubjectKind.FAT, "Fat", t.fat, d.goals.fat, "g", "Choose grilled or steamed over fried."

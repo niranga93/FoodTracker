@@ -13,6 +13,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,10 +26,12 @@ import androidx.compose.ui.unit.dp
 import com.example.nourio.data.ProfileStore
 import com.example.nourio.plan.BudgetModel
 import com.example.nourio.plan.PlanStore
+import kotlinx.coroutines.delay
 import kotlin.math.abs
 
+/** With [autoSave] (the setup guide) changes are saved as you type and when the card closes. */
 @Composable
-fun TargetCard() {
+fun TargetCard(autoSave: Boolean = false) {
     val context = LocalContext.current
     val plan = remember { PlanStore(context) }
     var target by remember {
@@ -53,6 +57,11 @@ fun TargetCard() {
             plan.paceKgPerWeek = pace
             saved = true
         }
+    }
+
+    if (autoSave) {
+        LaunchedEffect(target, pace) { delay(600); save() }
+        DisposableEffect(Unit) { onDispose { save() } }
     }
 
     WidgetCard("Target weight") {
@@ -88,7 +97,7 @@ fun TargetCard() {
             error?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
-            Button(onClick = { save() }, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+            if (!autoSave) Button(onClick = { save() }, modifier = Modifier.fillMaxWidth().height(50.dp)) {
                 Text(if (saved) "Saved" else "Save")
             }
             Text(

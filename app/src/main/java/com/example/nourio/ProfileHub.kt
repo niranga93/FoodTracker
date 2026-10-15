@@ -24,6 +24,7 @@ import com.example.nourio.data.ProfileStore
 import com.example.nourio.data.WeightDb
 import com.example.nourio.diet.DietStore
 import com.example.nourio.plan.PlanStore
+import kotlinx.coroutines.delay
 import java.util.Calendar
 
 // ---------------------------------------------------------------- sub-pages
@@ -122,8 +123,9 @@ private fun numStr(v: Double): String =
 
 private fun parseD(s: String): Double? = s.trim().replace(',', '.').toDoubleOrNull()
 
+/** With [autoSave] (the setup guide) changes are saved as you type and when the card closes, with no Save button. */
 @Composable
-fun PersonalCard() {
+fun PersonalCard(autoSave: Boolean = false) {
     val context = LocalContext.current
     val store = remember { ProfileStore(context) }
     val saved = remember { store.load() }
@@ -151,6 +153,11 @@ fun PersonalCard() {
             store.save(Profile(name.trim(), y, sex, h, w))
             justSaved = true
         }
+    }
+
+    if (autoSave) {
+        LaunchedEffect(name, birthYear, sex, height, weight) { delay(600); save() }
+        DisposableEffect(Unit) { onDispose { save() } }
     }
 
     val bmi = remember(height, weight) {
@@ -196,7 +203,7 @@ fun PersonalCard() {
             error?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
-            Button(onClick = { save() }, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+            if (!autoSave) Button(onClick = { save() }, modifier = Modifier.fillMaxWidth().height(50.dp)) {
                 Text(if (justSaved) "Saved" else "Save")
             }
         }

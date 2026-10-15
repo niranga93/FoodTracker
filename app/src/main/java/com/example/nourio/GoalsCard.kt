@@ -12,6 +12,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,8 +27,10 @@ import com.example.nourio.data.GoalStore
 import com.example.nourio.data.Goals
 import com.example.nourio.data.MealDb
 import com.example.nourio.data.ProfileStore
+import com.example.nourio.plan.Guidelines
 import com.example.nourio.plan.PlanStore
-import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
+import java.util.Calendar
 
 @Composable
 private fun GField(label: String, unit: String, value: String, modifier: Modifier, onChange: (String) -> Unit) {
@@ -41,8 +45,9 @@ private fun GField(label: String, unit: String, value: String, modifier: Modifie
     )
 }
 
+/** With [autoSave] (the setup guide) changes are saved as you type and when the card closes. */
 @Composable
-fun GoalsCard(goalStore: GoalStore, db: MealDb) {
+fun GoalsCard(goalStore: GoalStore, db: MealDb, autoSave: Boolean = false) {
     val context = LocalContext.current
     val current = remember { goalStore.load() }
     val plan = remember { PlanStore(context) }
@@ -50,7 +55,7 @@ fun GoalsCard(goalStore: GoalStore, db: MealDb) {
     fun parse(s: String) = s.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 } ?: 0.0
 
     var kcal by remember { mutableStateOf(show(current.kcal)) }
-    var sugar by remember { mutableStateOf(show(current.sugar)) }
+    var sugar by remember { mutableStateOf(show(current.addedSugar)) }
     var fat by remember { mutableStateOf(show(current.fat)) }
     var satFat by remember { mutableStateOf(show(current.satFat)) }
     var sodium by remember { mutableStateOf(show(current.sodiumMg)) }
@@ -63,25 +68,58 @@ fun GoalsCard(goalStore: GoalStore, db: MealDb) {
     val budget by rememberBudget(db, goalStore, 0)
     var fillNote by remember { mutableStateOf<String?>(null) }
 
-    // Only fills empty fields. Sugar is skipped: the app counts total sugar, not added sugar.
-    // Fat, saturated fat and carbs follow the FDA Daily Value proportions (78 g, 20 g and 275 g at 2,000 kcal).
+    // Replaces every limit with values worked out for this person (see Guidelines for the sources)
     fun fillGuidelines() {
-        val kcalGoal = budget?.takeIf { it.plan != null }?.baseKcal ?: parse(kcal)
-        val weight = ProfileStore(context).load().weightKg
-        if (sodium.isBlank()) sodium = "2300"
-        if (fiber.isBlank()) fiber = "25"
-        if (kcalGoal > 0) {
-            if (fat.isBlank()) fat = (kcalGoal * 0.35 / 9).roundToInt().toString()
-            if (satFat.isBlank()) satFat = (kcalGoal * 0.10 / 9).roundToInt().toString()
-            if (carbs.isBlank()) carbs = (kcalGoal * 0.55 / 4).roundToInt().toString()
+        val b = budget
+        val profile = ProfileStore(context).load()
+        val planKcal = b?.takeIf { it.plan != null }?.baseKcal
+        val kcalGoal = planKcal ?: parse(kcal)
+        val maintenance = b?.maintenanceKcal ?: 0.0
+        val direction = Guidelines.direction(b?.plan?.dailyChange, kcalGoal, maintenance)
+        val age = if (profile.birthYear > 0) Calendar.getInstance().get(Calendar.YEAR) - profile.birthYear else 0
+        val v = Guidelines.compute(kcalGoal, maintenance, Guidelines.Person(profile.weightKg, profile.heightCm, age, profile.sex, direction))
+
+        if (planKcal == null && kcal.isBlank()) kcal = v.kcal.f0()
+        sugar = v.addedSugar.f0(); fat = v.fat.f0(); satFat = v.satFat.f0(); sodium = v.sodiumMg.f0()
+        carbs = v.carbs.f0(); protein = v.protein.f0(); fiber = v.fiber.f0()
+
+        val goalWord = when (direction) {
+            Guidelines.Direction.LOSE -> "losing weight"
+            Guidelines.Direction.GAIN -> "gaining weight"
+            Guidelines.Direction.KEEP -> "keeping your weight"
         }
-        if (protein.isBlank() && weight > 0) protein = (weight * 0.8).roundToInt().toString()
-        fillNote = when {
-            kcalGoal <= 0 -> "Set a calorie goal or a target weight to fill fat, saturated fat and carbs."
-            weight <= 0 && protein.isBlank() -> "Add your weight in Personal details to fill protein."
-            else -> null
+        fillNote = buildString {
+            append(
+                when (v.kcalSource) {
+                    "your goal" -> "Based on ${v.kcal.f0()} kcal"
+                    "maintenance" -> "Based on your maintenance of about ${v.kcal.f0()} kcal"
+                    else -> "Based on the 2,000 kcal reference"
+                }
+            )
+            v.proteinPerKg?.let { append(", ${profile.weightKg.f0()} kg and $goalWord (protein ${it.f1()} g/kg)") }
+            append(".")
+            if (v.proteinPerKg == null) append(" Add your weight in Personal details for a protein goal that fits you.")
+            if (v.kcalSource == "reference") append(" Add height, weight and year of birth for calories that fit you.")
         }
         saved = false
+    }
+
+    fun save() {
+        goalStore.save(
+            Goals(
+                kcal = parse(kcal), addedSugar = parse(sugar), fat = parse(fat),
+                satFat = parse(satFat), sodiumMg = parse(sodium), carbs = parse(carbs),
+                protein = parse(protein), fiber = parse(fiber),
+                steps = goalStore.load().steps     // set from Insights; keep it
+            )
+        )
+        BackupService.autoBackup(context)
+        saved = true
+    }
+
+    if (autoSave) {
+        LaunchedEffect(kcal, sugar, fat, satFat, sodium, carbs, protein, fiber) { delay(600); save() }
+        DisposableEffect(Unit) { onDispose { save() } }
     }
 
     WidgetCard("Daily limits") {
@@ -97,7 +135,7 @@ fun GoalsCard(goalStore: GoalStore, db: MealDb) {
 
             Text("Maximums", style = MaterialTheme.typography.labelMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                GField("Sugar", "g", sugar, Modifier.weight(1f)) { sugar = it; saved = false }
+                GField("Added sugar", "g", sugar, Modifier.weight(1f)) { sugar = it; saved = false }
                 GField("Fat", "g", fat, Modifier.weight(1f)) { fat = it; saved = false }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -116,36 +154,33 @@ fun GoalsCard(goalStore: GoalStore, db: MealDb) {
             }
 
             OutlinedButton(onClick = { fillGuidelines() }, modifier = Modifier.fillMaxWidth()) {
-                Text("Fill common guidelines")
+                Text("Use recommended values")
             }
             fillNote?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
-            Expandable("What this fills") {
+            Expandable("How these are worked out") {
                 Text(
-                    "Empty fields only. Sodium 2,300 mg, fiber 25 g, and from your calorie goal: fat at 35%, " +
-                        "saturated fat at 10% and carbs at 55% of calories. Protein 0.8 g per kg of body weight. " +
-                        "Sugar is left to you. Edit freely. General guidelines, not medical advice.",
+                    "Replaces the limits below with values for you, from your calorie goal (or your maintenance " +
+                        "calories when there's no goal), weight, age and whether you're losing, keeping or gaining weight.\n\n" +
+                        "• Protein: 0.8 g per kg, 1.0 g from age 65, 1.2 g while losing weight and 1.4 g while " +
+                        "gaining. Above a BMI of 25, the weight at BMI 25 is used.\n" +
+                        "• Fat: up to 30% of calories. Saturated fat: up to 10%.\n" +
+                        "• Carbs: the calories left after protein and fat (40 to 60%).\n" +
+                        "• Added sugar: under 10% of calories, and at most 25 g a day (36 g for men). Natural " +
+                        "sugar in whole fruit, vegetables and milk has no limit, so it isn't counted here.\n" +
+                        "• Fiber: 14 g per 1,000 kcal (21 to 38 g).\n" +
+                        "• Sodium: 2,300 mg. 1,500 mg is often advised for high blood pressure.\n\n" +
+                        "From WHO, US dietary guidelines and the American Heart Association. Edit freely. " +
+                        "General guidelines, not medical advice.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            Button(
-                onClick = {
-                    goalStore.save(
-                        Goals(
-                            kcal = parse(kcal), sugar = parse(sugar), fat = parse(fat),
-                            satFat = parse(satFat), sodiumMg = parse(sodium), carbs = parse(carbs),
-                            protein = parse(protein), fiber = parse(fiber),
-                            steps = goalStore.load().steps     // set from Insights; keep it
-                        )
-                    )
-                    BackupService.autoBackup(context)
-                    saved = true
-                },
-                modifier = Modifier.fillMaxWidth().height(50.dp)
-            ) { Text(if (saved) "Saved" else "Save") }
+            if (!autoSave) Button(onClick = { save() }, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+                Text(if (saved) "Saved" else "Save")
+            }
         }
     }
 }

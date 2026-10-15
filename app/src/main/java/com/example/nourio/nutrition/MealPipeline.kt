@@ -90,6 +90,7 @@ object MealPipeline {
                 name, n.description, grams,
                 n.kcal, n.protein, n.fat, n.satFat,
                 n.carbs, n.sugar, n.fiber, n.sodiumMg,
+                addedSugar100 = n.addedSugar ?: aiAddedShare(o)?.let { it * n.sugar },
                 tags = tagList, estimate = estimate
             )
         }
@@ -109,7 +110,16 @@ object MealPipeline {
             carbs = v("carbs_per_100g"),
             sugar = v("sugar_per_100g"),
             fiber = v("fiber_per_100g"),
-            sodiumMg = v("sodium_mg_per_100g")
+            sodiumMg = v("sodium_mg_per_100g"),
+            addedSugar = aiAddedShare(o)?.let { it * v("sugar_per_100g") }
         )
+    }
+
+    /** The model's share of the sugar that is added, applied to a database match's sugar. Null if it didn't say. */
+    private fun aiAddedShare(o: JSONObject): Double? {
+        val added = o.optDouble("added_sugar_per_100g", Double.NaN)
+        val sugar = o.optDouble("sugar_per_100g", Double.NaN)
+        if (added.isNaN() || added < 0) return null
+        return if (sugar > 0) (added / sugar).coerceIn(0.0, 1.0) else 0.0
     }
 }

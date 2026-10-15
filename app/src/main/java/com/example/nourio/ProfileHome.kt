@@ -176,6 +176,11 @@ fun ProfileHub(db: MealDb, onOpenPage: (String) -> Unit, inner: PaddingValues) {
             ) { onOpenPage("settings") }
             Divider()
             IconRow(
+                Icons.Filled.ThumbUp, MaterialTheme.colorScheme.primary, "Setup guide",
+                "Walk through setup and permissions again"
+            ) { Onboarding.replay() }
+            Divider()
+            IconRow(
                 Icons.Filled.Info, MaterialTheme.colorScheme.onSurfaceVariant, "About",
                 "Version ${remember { appVersion(context).name }}"
             ) { onOpenPage("about") }

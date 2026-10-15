@@ -115,7 +115,7 @@ object DriveApi {
 
     private fun call(request: Request): String =
         http.newCall(request).execute().use { resp ->
-            val body = resp.body.string()
+            val body = resp.body?.string().orEmpty()
             if (!resp.isSuccessful) error("Google Drive error ${resp.code}: ${body.take(200)}")
             body
         }
@@ -201,7 +201,7 @@ object BackupCodec {
     }
 
     private fun goalsJson(goals: Goals) =
-        JSONObject().put("kcal", goals.kcal).put("sugar", goals.sugar).put("fat", goals.fat)
+        JSONObject().put("kcal", goals.kcal).put("addedSugar", goals.addedSugar).put("fat", goals.fat)
 
     fun encode(meals: List<Meal>, goals: Goals, extras: JSONObject?): String {
         val root = JSONObject()
@@ -223,7 +223,7 @@ object BackupCodec {
         val g = root.optJSONObject("goals")
         val goals = Goals(
             kcal = g?.optDouble("kcal", 0.0) ?: 0.0,
-            sugar = g?.optDouble("sugar", 0.0) ?: 0.0,
+            addedSugar = g?.optDouble("addedSugar", 0.0) ?: 0.0,
             fat = g?.optDouble("fat", 0.0) ?: 0.0,
             satFat = g?.optDouble("satFat", 0.0) ?: 0.0,
             sodiumMg = g?.optDouble("sodium", 0.0) ?: 0.0,

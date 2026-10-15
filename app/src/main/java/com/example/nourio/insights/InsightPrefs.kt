@@ -78,7 +78,7 @@ object InsightGoals {
         val weight = ProfileStore(context).load().weightKg
         return CurrentGoals(
             sodiumMg = g.sodiumMg,
-            sugar = g.sugar,
+            sugar = g.addedSugar,
             fiber = g.fiber.takeIf { it > 0 } ?: 25.0,
             protein = g.protein.takeIf { it > 0 } ?: (weight * 0.8),
             waterMl = WaterStore(context).goalMl.toDouble(),
@@ -95,7 +95,7 @@ object InsightGoals {
             val g = store.load()
             when (c.field) {
                 GoalField.SODIUM -> store.save(g.copy(sodiumMg = c.to))
-                GoalField.SUGAR -> store.save(g.copy(sugar = c.to))
+                GoalField.SUGAR -> store.save(g.copy(addedSugar = c.to))
                 GoalField.FIBER -> store.save(g.copy(fiber = c.to))
                 GoalField.PROTEIN -> store.save(g.copy(protein = c.to))
                 GoalField.STEPS -> store.save(g.copy(steps = c.to))

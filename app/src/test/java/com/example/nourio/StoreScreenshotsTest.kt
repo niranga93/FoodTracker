@@ -103,7 +103,7 @@ class StoreScreenshotsTest {
         val rnd = Random(7)
 
         ProfileStore(ctx).save(Profile("Alex Morgan", 1992, "Male", 178.0, 78.1))
-        goals.save(Goals(kcal = 2100.0, sugar = 50.0, fat = 70.0, satFat = 20.0, sodiumMg = 2300.0,
+        goals.save(Goals(kcal = 2100.0, addedSugar = 30.0, fat = 70.0, satFat = 20.0, sodiumMg = 2300.0,
             carbs = 260.0, protein = 110.0, fiber = 30.0, steps = 9000.0))
         PlanStore(ctx).apply { targetKg = 75.0; paceKgPerWeek = 0.25; useTargetGoal = true; carryOver = true }
         FeaturePrefs(ctx).set("in_coach", false)          // the coach needs a Gemini key

@@ -50,7 +50,7 @@ object HistoryLoader {
                 v[Metric.KCAL] = t.kcal
                 v[Metric.PROTEIN] = t.protein
                 v[Metric.FIBER] = t.fiber
-                v[Metric.SUGAR] = t.sugar
+                v[Metric.SUGAR] = t.addedSugar
                 v[Metric.SAT_FAT] = t.satFat
                 v[Metric.SODIUM] = t.sodium
                 val last = Instant.ofEpochMilli(meals.maxOf { it.timestamp }).atZone(zone)

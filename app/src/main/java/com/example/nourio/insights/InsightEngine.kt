@@ -13,7 +13,7 @@ enum class Metric(val label: String, val unit: String, val better: Int) {
     KCAL("Calories eaten", "kcal", 0),
     PROTEIN("Protein", "g", +1),
     FIBER("Fiber", "g", +1),
-    SUGAR("Sugar", "g", -1),
+    SUGAR("Added sugar", "g", -1),
     SAT_FAT("Saturated fat", "g", -1),
     SODIUM("Sodium", "mg", -1),
     WATER("Water", "ml", +1),
@@ -57,7 +57,7 @@ data class DayMetrics(val date: LocalDate, val values: Map<Metric, Double>) {
 /** Goals a tip can change. */
 enum class GoalField(val label: String, val unit: String) {
     SODIUM("Sodium limit", "mg"),
-    SUGAR("Sugar limit", "g"),
+    SUGAR("Added sugar limit", "g"),
     FIBER("Fiber goal", "g"),
     PROTEIN("Protein goal", "g"),
     WATER("Water goal", "ml"),
@@ -147,7 +147,7 @@ object InsightEngine {
             { _, _, yLow, yHigh, split -> "On days after less than ${"%.1f".format(split)} h of sleep you ate about ${n0(yLow - yHigh)} kcal more." },
             { g, split -> sleepTip("sleep-kcal", g, split, "Short nights are followed by bigger eating days for you. More sleep makes the calorie budget easier.") }),
         Hypothesis("sleep-sugar", Metric.SLEEP, Metric.SUGAR, false, -1,
-            { _, _, yLow, yHigh, split -> "After nights under ${"%.1f".format(split)} h you ate about ${n0(yLow - yHigh)} g more sugar." },
+            { _, _, yLow, yHigh, split -> "After nights under ${"%.1f".format(split)} h you ate about ${n0(yLow - yHigh)} g more added sugar." },
             { g, split -> sleepTip("sleep-sugar", g, split, "Tired days bring sugar cravings for you. Sleep is your best defence.") }),
         Hypothesis("sleep-rhr", Metric.SLEEP, Metric.RESTING_HR, false, -1,
             { _, _, yLow, yHigh, split -> "After short nights (under ${"%.1f".format(split)} h) your resting heart rate is about ${n0(yLow - yHigh)} bpm higher." },
@@ -168,9 +168,9 @@ object InsightEngine {
             { _, _, yLow, yHigh, split -> "After days over ${n0(split)} mg of sodium your blood pressure was about ${n0(yHigh - yLow)} mmHg higher the next day." },
             { g, _ -> sodiumTip("sodium-bp", g, "Your blood pressure rises after salty days.") }),
         Hypothesis("sugar-kcal", Metric.SUGAR, Metric.KCAL, true, +1,
-            { _, _, yLow, yHigh, split -> "After days with more than ${n0(split)} g of sugar you ate about ${n0(yHigh - yLow)} kcal more the next day." },
-            { g, _ -> if (g.sugar <= 0) null else Tip("sugar-kcal", "Lower your sugar limit",
-                "High-sugar days lead to bigger eating days for you.", GoalChange(GoalField.SUGAR, g.sugar, roundTo(g.sugar * 0.85, 5.0)))
+            { _, _, yLow, yHigh, split -> "After days with more than ${n0(split)} g of added sugar you ate about ${n0(yHigh - yLow)} kcal more the next day." },
+            { g, _ -> if (g.sugar <= 0) null else Tip("sugar-kcal", "Lower your added sugar limit",
+                "Days with a lot of added sugar lead to bigger eating days for you.", GoalChange(GoalField.SUGAR, g.sugar, roundTo(g.sugar * 0.85, 5.0)))
             }),
         Hypothesis("water-kcal", Metric.WATER, Metric.KCAL, false, -1,
             { _, _, yLow, yHigh, split -> "On days you drank more than ${n0(split)} ml of water you ate about ${n0(yLow - yHigh)} kcal less." },
@@ -332,8 +332,8 @@ object InsightEngine {
     private fun trendTips(trends: List<Trend>, g: CurrentGoals): List<Tip> = trends.mapNotNull { t ->
         when {
             t.metric == Metric.SODIUM && t.good == false -> sodiumTip("sodium-trend", g, "Your sodium is up ${n0(t.change)} mg a day compared with two weeks before.")
-            t.metric == Metric.SUGAR && t.good == false && g.sugar > 0 -> Tip("sugar-trend", "Sugar is creeping up",
-                "You're eating ${n0(t.change)} g more sugar a day than two weeks ago.", GoalChange(GoalField.SUGAR, g.sugar, roundTo(g.sugar * 0.9, 5.0)))
+            t.metric == Metric.SUGAR && t.good == false && g.sugar > 0 -> Tip("sugar-trend", "Added sugar is creeping up",
+                "You're eating ${n0(t.change)} g more added sugar a day than two weeks ago.", GoalChange(GoalField.SUGAR, g.sugar, roundTo(g.sugar * 0.9, 5.0)))
             t.metric == Metric.RESTING_HR && t.good == true -> Tip("rhr-improving", "Your fitness is improving",
                 "Your resting heart rate dropped ${n0(-t.change)} bpm in two weeks. Whatever you're doing, keep going!", null)
             t.metric == Metric.RESTING_HR && t.good == false -> Tip("rhr-rising", "Your resting heart rate is up",

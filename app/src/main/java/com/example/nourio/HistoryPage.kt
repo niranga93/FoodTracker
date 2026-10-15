@@ -145,7 +145,7 @@ private fun HistoryList(db: MealDb, goalStore: GoalStore, onOpenDay: (Int) -> Un
                         else "Nourio, last 7 days\n" +
                             "Days logged: ${week.size} of 7\n" +
                             "Average: ${nf.format(week.map { it.second.kcal }.average().toLong())} kcal a day\n" +
-                            "Sugar ${week.map { it.second.sugar }.average().f1()} g, " +
+                            "Added sugar ${week.map { it.second.addedSugar }.average().f1()} g, " +
                             "fat ${week.map { it.second.fat }.average().f1()} g a day"
                         val send = Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"

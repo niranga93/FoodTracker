@@ -18,11 +18,12 @@ data class Budget(
     val carryKcal: Double,
     val carryNote: String?,
     val kcalGoal: Double,              // today's goal: base plus carry-over
-    val baseSugar: Double,
+    val baseSugar: Double,             // added sugar
     val sugarGoal: Double,
     val baseFat: Double,
     val fatGoal: Double,
     val plan: BaseGoal?,
+    val maintenanceKcal: Double,       // 0 without height, weight and year of birth
     val planMessage: String?,
     val agg7: Aggregate,
     val agg30: Aggregate
@@ -45,6 +46,8 @@ suspend fun computeBudget(context: Context, db: MealDb, goalStore: GoalStore, da
         raw.copy(burned = raw.burned * factor)
     }
 
+    val maintenance = body?.let { BudgetModel.maintenance(it, days) } ?: 0.0
+
     // Base calorie goal: from the target weight plan, otherwise the manual goal
     var base = goals.kcal
     var source = if (goals.kcal > 0) "your goal" else ""
@@ -56,7 +59,7 @@ suspend fun computeBudget(context: Context, db: MealDb, goalStore: GoalStore, da
                 "Choose a higher target or talk to a doctor."
         } else {
             val g = BudgetModel.baseGoal(
-                body, BudgetModel.maintenance(body, days), plan.targetKg, plan.paceKgPerWeek
+                body, maintenance, plan.targetKg, plan.paceKgPerWeek
             )
             info = g
             base = g.kcal
@@ -72,7 +75,7 @@ suspend fun computeBudget(context: Context, db: MealDb, goalStore: GoalStore, da
     val adjusted = if (base > 0) round(base + carry.kcal) else 0.0
 
     val yLogged = (yesterday?.kcal ?: 0.0) >= BudgetModel.MIN_VALID_YESTERDAY_KCAL
-    val sugarCut = if (plan.carryOver) BudgetModel.macroReduction(goals.sugar, yesterday?.sugar ?: 0.0, yLogged) else 0.0
+    val sugarCut = if (plan.carryOver) BudgetModel.macroReduction(goals.addedSugar, yesterday?.addedSugar ?: 0.0, yLogged) else 0.0
     val fatCut = if (plan.carryOver) BudgetModel.macroReduction(goals.fat, yesterday?.fat ?: 0.0, yLogged) else 0.0
 
     return Budget(
@@ -81,11 +84,12 @@ suspend fun computeBudget(context: Context, db: MealDb, goalStore: GoalStore, da
         carryKcal = carry.kcal,
         carryNote = carry.note,
         kcalGoal = adjusted,
-        baseSugar = goals.sugar,
-        sugarGoal = goals.sugar - sugarCut,
+        baseSugar = goals.addedSugar,
+        sugarGoal = goals.addedSugar - sugarCut,
         baseFat = goals.fat,
         fatGoal = goals.fat - fatCut,
         plan = info,
+        maintenanceKcal = maintenance,
         planMessage = planMessage,
         agg7 = BudgetModel.aggregate(days, 7, base),
         agg30 = BudgetModel.aggregate(days, 30, base)

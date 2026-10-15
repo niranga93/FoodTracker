@@ -43,6 +43,9 @@ names, and never include peel, skin, or rind unless that part is eaten.
 Also give your best estimate of the nutrition per 100 g of each item as eaten
 (kcal, protein, fat, saturated fat, carbs, sugar and fiber in grams, sodium in mg).
 These are only used when no database match is found.
+added_sugar_per_100g is the part of the sugar that is added or free (sugar, syrups and honey added
+to the food, and the sugar in fruit juice). Sugar naturally inside whole fruit, vegetables, plain
+milk and plain yogurt is NOT added. It can never be more than sugar_per_100g.
 For each item, "contains" lists which of these tags the item is LIKELY to contain, including
 typical hidden ingredients for that dish (for example fried rice often contains eggs, soy and
 sesame): peanuts, tree_nuts, milk, eggs, fish, shellfish, soy, gluten, sesame, meat, pork,
@@ -83,6 +86,7 @@ alcohol, honey. Use an empty list if none apply.
                 "sat_fat_per_100g" to num(),
                 "carbs_per_100g" to num(),
                 "sugar_per_100g" to num(),
+                "added_sugar_per_100g" to num(),
                 "fiber_per_100g" to num(),
                 "sodium_mg_per_100g" to num()
             )
@@ -171,7 +175,7 @@ alcohol, honey. Use an empty list if none apply.
         }
     }
 
-    /** Every request goes through [GeminiRouter]: best free model first, keys in round robin. */
+    /** Every request goes through [GeminiRouter]: one key until it fails, every model on it first. */
     private suspend fun callWithFailover(bodyJson: String): String = GeminiRouter.generate(bodyJson)
 
     private fun encodeImage(file: File): String {

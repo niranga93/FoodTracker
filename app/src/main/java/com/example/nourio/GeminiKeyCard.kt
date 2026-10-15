@@ -112,7 +112,7 @@ fun GeminiKeyCard() {
     ) {
         Text(
             "Photo and text analysis and the coach use your own free key. Add up to ${GeminiKeys.SLOTS} keys: " +
-                "requests take turns across them, so you reach the daily free limit less often.",
+                "one key is used until it reaches its limit, then the next one takes over.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

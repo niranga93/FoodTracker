@@ -44,6 +44,7 @@ fun FoodItem.withMatch(p: NutritionLookup.Per100g): FoodItem = copy(
     satFat100 = p.satFat,
     carbs100 = p.carbs,
     sugar100 = p.sugar,
+    addedSugar100 = p.addedSugar,
     fiber100 = p.fiber,
     sodium100 = p.sodiumMg
 )

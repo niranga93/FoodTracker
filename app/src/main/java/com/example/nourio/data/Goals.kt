@@ -5,7 +5,7 @@ import android.content.Context
 
 data class Goals(
     val kcal: Double,
-    val sugar: Double,
+    val addedSugar: Double,              // limit for added sugar; natural sugar has no limit
     val fat: Double,
     val satFat: Double = 0.0,
     val sodiumMg: Double = 0.0,
@@ -25,7 +25,7 @@ class GoalStore(context: Context) {
 
     fun load() = Goals(
         kcal = d("kcal"),
-        sugar = d("sugar"),
+        addedSugar = d("addedSugar"),        // the old "sugar" key held a total-sugar limit and is no longer used
         fat = d("fat"),
         satFat = d("satFat"),
         sodiumMg = d("sodium"),
@@ -38,7 +38,7 @@ class GoalStore(context: Context) {
     fun save(g: Goals) {
         prefs.edit {
             putFloat("kcal", g.kcal.toFloat())
-            putFloat("sugar", g.sugar.toFloat())
+            putFloat("addedSugar", g.addedSugar.toFloat())
             putFloat("fat", g.fat.toFloat())
             putFloat("satFat", g.satFat.toFloat())
             putFloat("sodium", g.sodiumMg.toFloat())

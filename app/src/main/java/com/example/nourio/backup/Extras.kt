@@ -16,7 +16,7 @@ import org.json.JSONObject
 object BackupExtras {
     private val PREF_FILES = listOf(
         "goals", "profile", "plan", "diet", "water",
-        "favorites", "favorite_meals", "features", "calibration"
+        "favorites", "favorite_meals", "features", "calibration", "reminders", "badges"
     )
 
     private fun prefsToJson(context: Context, name: String): JSONObject {

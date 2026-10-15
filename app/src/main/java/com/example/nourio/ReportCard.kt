@@ -28,7 +28,7 @@ import kotlin.math.min
 
 // ------------------------------------------------------------------ grading
 
-enum class SubjectKind { CALORIES, PROTEIN, FIBER, SUGAR, FAT, SAT_FAT, SODIUM, WATER, STEPS }
+enum class SubjectKind { CALORIES, PROTEIN, FIBER, SUGAR, FAT, SAT_FAT, SODIUM, WATER, STEPS, SLEEP }
 
 /** One line of the report: a 0..1 score, its letter grade and a short comment. */
 data class Subject(
@@ -55,7 +55,10 @@ data class DayInputs(
     val waterGoalMl: Int,
     val steps: Long?,
     val isToday: Boolean,
-    val hourOfDay: Double
+    val hourOfDay: Double,
+    val sleep: com.example.nourio.insights.SleepNight? = null,   // the night before this day
+    val bedtimeShiftH: Double? = null,                           // that bedtime against your usual one
+    val sleepGoalH: Double = 7.0
 )
 
 object Grading {
@@ -171,6 +174,8 @@ object Grading {
             )
         }
 
+        d.sleep?.let { out += sleepSubject(it, d.bedtimeShiftH, d.sleepGoalH) }
+
         // Calories count three times: it's the main thing the day is about
         val graded = if (logged) out else emptyList()
         val score = if (graded.isEmpty()) null else {
@@ -179,6 +184,36 @@ object Grading {
         }
         return Report(out, score)
     }
+
+    /** "7 h 20 m" */
+    fun hm(minutes: Double): String {
+        val m = minutes.toLong().coerceAtLeast(0)
+        return if (m < 60) "$m m" else "${m / 60} h ${m % 60} m"
+    }
+
+    /**
+     * Last night, graded mostly on time asleep against the goal (70%), then on quality: share of the
+     * night spent asleep (15%) and a bedtime close to your usual one (15%). Parts without data drop out.
+     */
+    fun sleepSubject(night: com.example.nourio.insights.SleepNight, shiftH: Double?, goalH: Double): Subject {
+        val goal = goalH.takeIf { it > 0 } ?: 7.0
+        val r = night.asleepH / goal
+        val duration = if (r >= 1) 1.0 else max(0.0, 1.0 - (1.0 - r) * 1.5)      // 1 h short of 7 h is a C
+        val quality = night.efficiency?.let { if (it >= 85) 1.0 else max(0.0, 1.0 - (85 - it) / 30) }
+        val rhythm = shiftH?.let { if (it <= 0.5) 1.0 else max(0.0, 1.0 - (it - 0.5) / 2) }
+        val parts = listOfNotNull(duration to 0.7, quality?.let { it to 0.15 }, rhythm?.let { it to 0.15 })
+        val score = parts.sumOf { it.first * it.second } / parts.sumOf { it.second }
+
+        val comment = when {
+            duration < 0.9 -> "${hm((goal - night.asleepH) * 60)} short of your ${goal.trimmed()} h goal. An earlier bedtime tonight helps."
+            quality != null && quality < 0.9 -> "Restless night: asleep ${night.efficiency!!.toLong()}% of your time in bed. Keep the room cool and dark."
+            rhythm != null && rhythm < 0.9 -> "Bedtime was ${hm(shiftH!! * 60)} off your usual. A steady bedtime makes sleep come easier."
+            else -> "Well rested."
+        }
+        return Subject(SubjectKind.SLEEP, "Sleep", "${hm(night.asleepH * 60)} of ${goal.trimmed()} h", score, comment)
+    }
+
+    private fun Double.trimmed(): String = if (this % 1.0 == 0.0) toLong().toString() else "%.1f".format(this)
 
     private fun limitSubject(kind: SubjectKind, name: String, value: Double, limit: Double, unit: String, tip: String): Subject {
         val s = limitScore(value, limit)

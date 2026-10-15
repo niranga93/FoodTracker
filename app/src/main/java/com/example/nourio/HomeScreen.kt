@@ -65,6 +65,12 @@ fun HomeScreen(
     val nf = remember { NumberFormat.getIntegerInstance() }
     val openPage = LocalOpenPage.current
     val water = remember { WaterStore(context) }
+    val sleepGoal = remember { com.example.nourio.insights.InsightPrefs(context).sleepGoalH }
+    var sleep by remember(dayOffset) { mutableStateOf<com.example.nourio.health.SleepData?>(null) }
+    LaunchedEffect(dayOffset) {
+        sleep = runCatching { com.example.nourio.health.SleepRepo.load(context, dayOffset) }
+            .getOrDefault(com.example.nourio.health.SleepData(false, emptyMap(), emptyMap()))
+    }
 
     LaunchedEffect(dayOffset) {
         totals = withContext(Dispatchers.IO) { loadDay(db, dayOffset).flatMap { it.items }.totals() }
@@ -108,7 +114,10 @@ fun HomeScreen(
                 waterGoalMl = water.goalMl,
                 steps = day?.steps,
                 isToday = dayOffset == 0,
-                hourOfDay = Grading.nowHour()
+                hourOfDay = Grading.nowHour(),
+                sleep = sleep?.nights?.get(dayOffset),
+                bedtimeShiftH = sleep?.shifts?.get(dayOffset),
+                sleepGoalH = sleepGoal
             )
         )
         item {
@@ -132,8 +141,16 @@ fun HomeScreen(
         // Photos taken offline: hidden when there are none
         if (dayOffset == 0) item { PendingMealsCard(onOpenPending) }
         item { TeacherNoteCard(report, dayOffset == 0) }
+        // The night before sets up the day: right after the note, before the day's activity
+        if (features.isOn("home_sleep")) item {
+            LastNightCard(sleep, dayOffset, sleepGoal, report.subjects.firstOrNull { it.kind == SubjectKind.SLEEP })
+        }
         if (features.isOn("home_fast")) item { com.example.nourio.fasting.FastingCard(db, dayOffset) }
         if (features.isOn("home_walk")) item { MoveCard(day, totals.kcal, body, dayOffset, goals.stepGoal) }
+        if (dayOffset == 0 && features.isOn("home_exercise")) item {
+            val bodyDays by rememberBodyData(0)
+            com.example.nourio.exercise.ExerciseCard(day, week, body, goals.stepGoal, bodyDays)
+        }
         if (features.isOn("home_week") && week.isNotEmpty()) item { WeekCard(week, goalKcal) }
         if (features.isOn("home_weight")) item { WeightOutlookCard(db, body) }
         // The detailed grades come last, after the dashboard

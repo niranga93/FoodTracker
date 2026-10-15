@@ -20,6 +20,7 @@ import com.example.nourio.fasting.Fasting
 import com.example.nourio.health.HealthExtras
 import com.example.nourio.health.HealthPrefs
 import com.example.nourio.health.HealthRepo
+import com.example.nourio.health.SleepRepo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Duration
@@ -111,17 +112,19 @@ object HistoryLoader {
         }
         if (prefs.readExtras && granted.containsAll(HealthExtras.READ_PERMS)) {
             daily(HeartRateRecord.BPM_AVG) { v, r -> v[Metric.AVG_HR] = r.toDouble() }
-            // Sleep belongs to the day you wake up
+            // Sleep belongs to the day you wake up: duration, bedtime, wake time, awake time and stages
             runCatching {
                 client.readRecords(
                     ReadRecordsRequest(
                         SleepSessionRecord::class,
                         TimeRangeFilter.between(first.minusDays(1).atStartOfDay(zone).toInstant(), today.atTime(18, 0).atZone(zone).toInstant())
                     )
-                ).records.groupBy { it.endTime.atZone(zone).toLocalDate() }.forEach { (date, sessions) ->
-                    val h = sessions.sumOf { Duration.between(it.startTime, it.endTime).toMinutes() } / 60.0
-                    if (h in 1.0..16.0) values[date]?.set(Metric.SLEEP, h)
+                ).records.groupBy { it.endTime.atZone(zone).toLocalDate() }.forEach { (date, records) ->
+                    val v = values[date] ?: return@forEach
+                    SleepNight.of(records.map { with(SleepRepo) { it.toSession() } }, zone)?.into(v)
                 }
+                SleepNight.bedtimeShifts(values.mapNotNull { (d, v) -> v[Metric.BEDTIME]?.let { d to it } }.toMap())
+                    .forEach { (date, shift) -> values[date]?.set(Metric.BEDTIME_SHIFT, shift) }
             }
         }
         if (HealthExtras.P_RESTING_HR in granted) {

@@ -47,8 +47,6 @@ import com.example.nourio.data.WeightDb
 import com.example.nourio.diet.DietStore
 import com.example.nourio.health.HealthPrefs
 import com.example.nourio.plan.PlanStore
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.text.NumberFormat
 import java.util.Calendar
 import kotlin.math.abs
@@ -58,23 +56,6 @@ import kotlin.math.ceil
 private val Pink = Color(0xFFFF6B9A)
 private val Amber = Color(0xFFFFB547)
 private val Violet = Color(0xFF9C8CFF)
-
-private data class LogStats(val streak: Int, val meals30: Int)
-
-/** Consecutive days with a meal logged (today counts once something is logged), and meals in 30 days. */
-private fun logStats(db: MealDb): LogStats {
-    // One query for the last year, then count days locally
-    val zone = java.time.ZoneId.systemDefault()
-    val today = java.time.LocalDate.now(zone)
-    val since = today.minusDays(365).atStartOfDay(zone).toInstant().toEpochMilli()
-    val meals = db.between(since, today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli())
-    val days = meals.groupingBy { java.time.Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate() }.eachCount()
-    var streak = 0
-    var day = if (today in days) today else today.minusDays(1)
-    while (day in days) { streak++; day = day.minusDays(1) }
-    val meals30 = days.filterKeys { it > today.minusDays(30) }.values.sum()
-    return LogStats(streak, meals30)
-}
 
 @Composable
 fun ProfileHub(db: MealDb, onOpenPage: (String) -> Unit, inner: PaddingValues) {
@@ -88,8 +69,6 @@ fun ProfileHub(db: MealDb, onOpenPage: (String) -> Unit, inner: PaddingValues) {
     val driveEmail = remember { BackupPrefs(context).email }
     val keyCount = remember { GeminiKeys.count() }
     val budget by rememberBudget(db, GoalStore(context), 0)
-    var stats by remember { mutableStateOf<LogStats?>(null) }
-    LaunchedEffect(Unit) { stats = withContext(Dispatchers.IO) { logStats(db) } }
 
     val nf = remember { NumberFormat.getIntegerInstance() }
     val weightNow = weights.lastOrNull()?.kg ?: profile.weightKg
@@ -106,18 +85,8 @@ fun ProfileHub(db: MealDb, onOpenPage: (String) -> Unit, inner: PaddingValues) {
             JourneyCard(weights.first().kg, weightNow, plan.targetKg, plan.paceKgPerWeek) { onOpenPage("goals") }
         }
 
-        stats?.let { s ->
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                MiniTile(
-                    Icons.Filled.ThumbUp, MaterialTheme.colorScheme.secondary,
-                    if (s.streak == 1) "1 day" else "${s.streak} days", "logging streak", Modifier.weight(1f)
-                )
-                MiniTile(
-                    Icons.Filled.Star, MaterialTheme.colorScheme.primary,
-                    nf.format(s.meals30), "meals in 30 days", Modifier.weight(1f)
-                )
-            }
-        }
+        // Logging streak, badge count and the next badge; opens the full Streaks & badges page
+        com.example.nourio.achievements.StreakCard(db)
 
         Section("Health") {
             IconRow(
@@ -343,19 +312,6 @@ private fun JourneyPoint(label: String, kg: Double, align: Alignment.Horizontal,
     }
 }
 
-@Composable
-private fun MiniTile(icon: ImageVector, tint: Color, value: String, label: String, modifier: Modifier) {
-    AppCard(modifier) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconBadge(icon, tint)
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
-}
 
 @Composable
 private fun IconBadge(icon: ImageVector, tint: Color) {

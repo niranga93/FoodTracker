@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -50,6 +51,9 @@ import com.example.nourio.insights.HistoryLoader
 import com.example.nourio.insights.InsightEngine
 import com.example.nourio.insights.InsightGoals
 import com.example.nourio.insights.Metric
+import com.example.nourio.reminders.Reminder
+import com.example.nourio.reminders.ReminderPrefs
+import com.example.nourio.reminders.Reminders
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -204,6 +208,7 @@ fun FastingCard(db: MealDb, dayOffset: Int) {
 fun FastingPage(db: MealDb) {
     val context = LocalContext.current
     val prefs = remember { FastingPrefs(context) }
+    val reminders = remember { ReminderPrefs(context) }
     var goal by remember { mutableDoubleStateOf(prefs.goalH) }
     val today = LocalDate.now()
     var data by remember { mutableStateOf<Pair<List<Long>, List<FastDay>>?>(null) }
@@ -234,7 +239,7 @@ fun FastingPage(db: MealDb) {
             Fasting.GOALS.forEach { g ->
                 FilterChip(
                     selected = goal == g,
-                    onClick = { goal = g; prefs.goalH = g },
+                    onClick = { goal = g; prefs.goalH = g; Reminders.schedule(context) },
                     label = { Text(ratio(g)) }
                 )
             }
@@ -249,6 +254,18 @@ fun FastingPage(db: MealDb) {
             },
             Modifier.padding(top = 8.dp)
         )
+        var remind by remember { mutableStateOf(reminders.isOn(Reminder.FAST_START)) }
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Remind me", style = MaterialTheme.typography.bodyLarge)
+                Muted("When your eating window closes and when you reach your goal")
+            }
+            Switch(checked = remind, onCheckedChange = {
+                remind = it
+                reminders.set(Reminder.FAST_START, it)
+                Reminders.schedule(context)
+            })
+        }
     }
 
     val days = data?.second ?: return

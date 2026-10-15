@@ -13,8 +13,10 @@ class FeaturePrefs(context: Context) {
 
     companion object {
         val ALL = listOf(
+            Feature("home_sleep", "Last night", "Sleep length, stages, bedtime and your week of nights", "Home"),
             Feature("home_fast", "Fasting", "Time since your last meal and your eating window", "Home"),
             Feature("home_walk", "Move today", "Steps, activity burn and a walk to balance", "Home"),
+            Feature("home_exercise", "What to do today", "Exercise that balances what you've eaten", "Home"),
             Feature("home_week", "This week", "Day-by-day deficit and surplus", "Home"),
             Feature("home_weight", "Weight outlook", "Trend, 30-day outlook, target date", "Home"),
 
@@ -25,6 +27,7 @@ class FeaturePrefs(context: Context) {
             Feature("in_water", "Hydration", "Water tracker", "Intake"),
             Feature("in_coach", "Coach note", "AI daily summary", "Intake"),
 
+            Feature("burn_coach", "What to do today", "Exercise suggestions from your calorie balance", "Burned"),
             Feature("burn_split", "Where your burn comes from", "Resting and activity", "Burned"),
             Feature("burn_week", "Eaten vs burned", "Last 7 days", "Burned"),
             Feature("burn_steps", "Daily steps", "Last 7 days", "Burned"),

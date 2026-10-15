@@ -33,6 +33,7 @@ object RecipeFetcher {
         val page = runCatching { download(url) }.getOrNull()
             ?: error("Couldn't read that page. Copy the ingredients and share them as text instead.")
         val body = fromJsonLd(page) ?: plainText(page)
+        com.example.nourio.achievements.Achievements.markRecipeLink()
         val intro = text.replace(found, "").trim()
         return (if (intro.isNotBlank()) "$intro\n\n" else "") + body.take(6000)
     }

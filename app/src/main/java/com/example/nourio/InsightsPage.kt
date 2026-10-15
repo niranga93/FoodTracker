@@ -349,7 +349,7 @@ private fun TrendRow(t: Trend) {
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(t.metric.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-            Muted("${t.metric.format(t.before)} → ${t.metric.format(t.recent)} a day")
+            Muted("${t.metric.format(t.before)} → ${t.metric.format(t.recent)} ${if (t.metric in Metric.NIGHTLY) "a night" else "a day"}")
         }
         Sparkline(t.series, Modifier.width(80.dp).height(30.dp))
     }

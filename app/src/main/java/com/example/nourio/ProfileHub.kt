@@ -1,5 +1,8 @@
 package com.example.nourio
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -24,6 +27,10 @@ import com.example.nourio.data.ProfileStore
 import com.example.nourio.data.WeightDb
 import com.example.nourio.diet.DietStore
 import com.example.nourio.plan.PlanStore
+import com.example.nourio.reminders.Reminder
+import com.example.nourio.reminders.ReminderPrefs
+import com.example.nourio.reminders.Reminders
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import java.util.Calendar
 
@@ -41,6 +48,7 @@ fun PageScreen(id: String, db: MealDb, goalStore: GoalStore, onBack: () -> Unit)
         "about" -> "About"
         "insights" -> "Insights & patterns"
         "fasting" -> "Fasting"
+        "badges" -> "Streaks & badges"
         else -> when {
             id.startsWith("budget") -> "Your calorie budget"
             id.startsWith("body") -> "Sleep, heart and vitals"
@@ -70,6 +78,7 @@ fun PageScreen(id: String, db: MealDb, goalStore: GoalStore, onBack: () -> Unit)
                 "about" -> AboutContent()
                 "insights" -> InsightsPage(db)
                 "fasting" -> com.example.nourio.fasting.FastingPage(db)
+                "badges" -> com.example.nourio.achievements.BadgesPage(db)
                 // "budget:<day offset>", opened from the Home screen for the day shown there
                 else -> if (id.startsWith("body")) {
                     BodyPage(id.substringAfter(':', "0").toIntOrNull() ?: 0)
@@ -96,10 +105,37 @@ fun SettingsContent() {
                 features.forEachIndexed { i, f ->
                     key(f.key) {
                         var on by remember { mutableStateOf(prefs.isOn(f.key)) }
-                        SwitchRow(f.title, f.hint, on) { on = it; prefs.set(f.key, it) }
+                        SwitchRow(f.title, f.hint, on) {
+                            on = it; prefs.set(f.key, it)
+                            if (f.key == "home_fast") Reminders.schedule(context)   // fasting reminders follow the card
+                        }
                     }
                     if (i < features.lastIndex) HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                 }
+            }
+        }
+    }
+
+    GroupTitle("Reminders")
+    AppCard(Modifier.fillMaxWidth()) {
+        Column {
+            val reminders = remember { ReminderPrefs(context) }
+            Reminder.SWITCHES.forEachIndexed { i, r ->
+                key(r.key) {
+                    var on by remember { mutableStateOf(reminders.isOn(r)) }
+                    SwitchRow(r.title, r.hint, on) { on = it; reminders.set(r, it); Reminders.schedule(context) }
+                }
+                if (i < Reminder.SWITCHES.lastIndex) HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+            }
+            if (Build.VERSION.SDK_INT >= 33 &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) {
+                Text(
+                    "Notifications are off for Nourio, so reminders can't show. Turn them on in Settings > Apps > Nourio.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                )
             }
         }
     }

@@ -80,6 +80,15 @@ class MealDb(context: Context) : SQLiteOpenHelper(context, "meals.db", null, 2) 
     }
     fun all(): List<Meal> = between(0L, Long.MAX_VALUE)
 
+    /** Every meal time, oldest first, without loading the items (for streaks and badges). */
+    fun timestamps(): List<Long> {
+        val out = ArrayList<Long>()
+        readableDatabase.rawQuery("SELECT ts FROM meals ORDER BY ts", null).use { c ->
+            while (c.moveToNext()) out += c.getLong(0)
+        }
+        return out
+    }
+
     fun count(): Int {
         readableDatabase.rawQuery("SELECT COUNT(*) FROM meals", null).use { c ->
             return if (c.moveToFirst()) c.getInt(0) else 0

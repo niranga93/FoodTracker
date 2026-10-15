@@ -119,6 +119,7 @@ class MainActivity : ComponentActivity() {
         com.example.nourio.insights.InsightWorker.schedule(applicationContext)     // daily tip, keeps an existing schedule
         com.example.nourio.ai.GeminiKeys.init(applicationContext)
         Onboarding.init(applicationContext)                                        // the setup guide on the first start
+        com.example.nourio.achievements.Achievements.init(applicationContext)
         if (savedInstanceState == null) {
             openPendingFrom(intent)
             handleShare(intent)
@@ -177,6 +178,7 @@ class MainActivity : ComponentActivity() {
         super.onStop()
         BackupService.autoBackup(this)      // saves anything changed while the app was open
         HealthSync.runAsync(this)           // sends meals, water and weight to Health Connect
+        com.example.nourio.reminders.Reminders.schedule(this)   // fasting times follow the meals just logged
     }
 
     /** A photo, a recipe link or meal text shared from another app opens the review. */
@@ -220,6 +222,12 @@ class MainActivity : ComponentActivity() {
         // From the daily tip notification. Only this page is allowed, since other apps can start this activity.
         if (intent?.getStringExtra(com.example.nourio.insights.InsightWorker.EXTRA_OPEN_PAGE) == "insights") {
             nav.open(Screen.Page("insights"))
+        }
+        // From a reminder. Again only a fixed set of places.
+        when (intent?.getStringExtra(com.example.nourio.reminders.Reminders.EXTRA_OPEN_TAB)) {
+            "intake" -> { nav.open(Screen.Main); nav.setDay(0); nav.selectTab(NavTab.Intake) }
+            "home" -> { nav.open(Screen.Main); nav.setDay(0); nav.selectTab(NavTab.Home) }
+            "fasting" -> nav.open(Screen.Page("fasting"))
         }
     }
 }

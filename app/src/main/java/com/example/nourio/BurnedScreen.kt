@@ -119,6 +119,9 @@ fun BurnedScreen(db: MealDb, dayOffset: Int, onDayChange: (Int) -> Unit, inner: 
                 }
             }
         } else {
+            if (dayOffset == 0 && features.isOn("burn_coach")) item {
+                com.example.nourio.exercise.ExerciseCard(day, week, body, remember { GoalStore(context).load().stepGoal }, bodyDays)
+            }
             if (features.isOn("burn_split")) item { BurnSplitCard(day, dayOffset, hasDeviceData) }
             if (features.isOn("burn_week") && week.isNotEmpty()) item { EatenBurnedCard(week) }
             if (features.isOn("burn_steps")) item { StepsCard(week, remember { GoalStore(context).load().stepGoal }) }

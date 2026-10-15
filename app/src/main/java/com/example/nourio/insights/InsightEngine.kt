@@ -21,7 +21,14 @@ enum class Metric(val label: String, val unit: String, val better: Int) {
     FAST("Overnight fast", "h", 0),                   // hours from the last meal to the first meal of the day
     EATING_WINDOW("Eating window", "h", 0),           // first to last meal
     STEPS("Steps", "", +1),
-    SLEEP("Sleep", "h", +1),
+    SLEEP("Sleep", "h", +1),                          // time asleep; time in bed when no stages were recorded
+    BEDTIME("Bedtime", "h", 0),                       // hour the night began; after midnight counts on past 24
+    WAKE_TIME("Wake-up time", "h", 0),
+    AWAKE("Awake during the night", "min", -1),
+    SLEEP_EFFICIENCY("Sleep efficiency", "%", +1),    // share of time in bed spent asleep
+    DEEP_SLEEP("Deep sleep", "min", +1),
+    REM_SLEEP("REM sleep", "min", +1),
+    BEDTIME_SHIFT("Bedtime off your usual", "h", -1), // from the median of the 7 nights before
     RESTING_HR("Resting heart rate", "bpm", -1),
     AVG_HR("Average heart rate", "bpm", 0),
     SYSTOLIC("Blood pressure (systolic)", "mmHg", -1),
@@ -30,8 +37,10 @@ enum class Metric(val label: String, val unit: String, val better: Int) {
     WEIGHT_CHANGE("Weight change to the next day", "kg", 0);
 
     fun format(v: Double): String = when (this) {
-        LAST_MEAL -> clock(v)
-        SLEEP, FAST, EATING_WINDOW -> "${(v).let { "%.1f".format(it) }} h"
+        LAST_MEAL, BEDTIME, WAKE_TIME -> clock(v % 24)
+        SLEEP, FAST, EATING_WINDOW, BEDTIME_SHIFT -> "${(v).let { "%.1f".format(it) }} h"
+        AWAKE, DEEP_SLEEP, REM_SLEEP -> "${v.roundToLong()} min"
+        SLEEP_EFFICIENCY -> "${v.roundToLong()}%"
         WEIGHT, WEIGHT_CHANGE -> "%.1f kg".format(v)
         STEPS -> "%,d steps".format(v.roundToLong())
         else -> "%,d %s".format(v.roundToLong(), unit)
@@ -40,6 +49,9 @@ enum class Metric(val label: String, val unit: String, val better: Int) {
     companion object {
         /** Intake metrics only mean something on days with a full food log. */
         val INTAKE = setOf(KCAL, PROTEIN, FIBER, SUGAR, SAT_FAT, SODIUM, LAST_MEAL, FAST, EATING_WINDOW)
+
+        /** Measured once a night rather than once a day. */
+        val NIGHTLY = setOf(SLEEP, BEDTIME, WAKE_TIME, AWAKE, SLEEP_EFFICIENCY, DEEP_SLEEP, REM_SLEEP, BEDTIME_SHIFT)
 
         fun clock(h: Double): String {
             val hh = h.toInt().coerceIn(0, 23)
@@ -166,7 +178,41 @@ object InsightEngine {
         Hypothesis("late-sleep", Metric.LAST_MEAL, Metric.SLEEP, true, -1,
             { _, _, yLow, yHigh, split -> "When your last meal was after ${Metric.clock(split)} you slept about ${n0((yLow - yHigh) * 60)} minutes less." },
             { _, split -> Tip("late-sleep", "Finish dinner earlier", "You sleep less after late meals. Try to finish eating before ${Metric.clock(min(split, 20.0))}.", null) }),
-        Hypothesis("sodium-weight", Metric.SODIUM, Metric.WEIGHT_CHANGE, false, +1,
+
+        // Sleep timing and quality. Each pair has a known mechanism: late or broken sleep raises hunger
+        // hormones (ghrelin) and cravings, late meals disturb sleep, and activity deepens it.
+        Hypothesis("bedtime-kcal", Metric.BEDTIME, Metric.KCAL, false, +1,
+            { _, _, yLow, yHigh, split -> "On days after going to bed after ${clk(split)} you ate about ${n0(yHigh - yLow)} kcal more." },
+            { _, split -> bedtimeTip(split, "Late nights are followed by bigger eating days for you.") }),
+        Hypothesis("bedtime-sugar", Metric.BEDTIME, Metric.SUGAR, false, +1,
+            { _, _, yLow, yHigh, split -> "After bedtimes later than ${clk(split)} you ate about ${n0(yHigh - yLow)} g more added sugar." },
+            { _, split -> bedtimeTip(split, "Late nights bring sugar cravings for you.") }),
+        Hypothesis("shift-kcal", Metric.BEDTIME_SHIFT, Metric.KCAL, false, +1,
+            { _, _, yLow, yHigh, split -> "When your bedtime was more than ${h1(split)} off your usual, you ate about ${n0(yHigh - yLow)} kcal more the next day." },
+            { _, _ -> steadyBedtimeTip("An irregular bedtime goes with bigger eating days for you.") }),
+        Hypothesis("awake-kcal", Metric.AWAKE, Metric.KCAL, false, +1,
+            { _, _, yLow, yHigh, split -> "After restless nights (more than ${n0(split)} min awake) you ate about ${n0(yHigh - yLow)} kcal more." },
+            { _, _ -> restlessTip("Broken nights are followed by bigger eating days for you.") }),
+        Hypothesis("awake-sugar", Metric.AWAKE, Metric.SUGAR, false, +1,
+            { _, _, yLow, yHigh, split -> "After nights with more than ${n0(split)} min awake you ate about ${n0(yHigh - yLow)} g more added sugar." },
+            { _, _ -> restlessTip("Broken nights bring sugar cravings for you.") }),
+        Hypothesis("efficiency-kcal", Metric.SLEEP_EFFICIENCY, Metric.KCAL, false, -1,
+            { _, _, yLow, yHigh, split -> "After nights where you slept less than ${n0(split)}% of your time in bed, you ate about ${n0(yLow - yHigh)} kcal more." },
+            { _, _ -> restlessTip("Nights of poor sleep quality lead to bigger eating days for you.") }),
+        Hypothesis("late-awake", Metric.LAST_MEAL, Metric.AWAKE, true, +1,
+            { _, _, yLow, yHigh, split -> "When your last meal was after ${Metric.clock(split)} you lay awake about ${n0(yHigh - yLow)} minutes longer that night." },
+            { _, split -> lateMealTip(split, "Late meals make your nights more restless.") }),
+        Hypothesis("late-deep", Metric.LAST_MEAL, Metric.DEEP_SLEEP, true, -1,
+            { _, _, yLow, yHigh, split -> "When your last meal was after ${Metric.clock(split)} you got about ${n0(yLow - yHigh)} minutes less deep sleep." },
+            { _, split -> lateMealTip(split, "Late meals cut into your deep sleep.") }),
+        Hypothesis("steps-deep", Metric.STEPS, Metric.DEEP_SLEEP, true, +1,
+            { _, _, yLow, yHigh, split -> "On days with more than ${n0(split)} steps you got about ${n0(yHigh - yLow)} minutes more deep sleep that night." },
+            { g, _ -> stepTip("steps-deep", g, "Active days give you more deep sleep.") }),
+        Hypothesis("deep-rhr", Metric.DEEP_SLEEP, Metric.RESTING_HR, false, -1,
+            { _, _, yLow, yHigh, split -> "After nights with more than ${n0(split)} min of deep sleep your resting heart rate was about ${n0(yLow - yHigh)} bpm lower." },
+            { _, _ -> null }),
+
+        Hypothesis("sodium-weight",Metric.SODIUM, Metric.WEIGHT_CHANGE, false, +1,
             { _, _, yLow, yHigh, split -> "After days over ${n0(split)} mg of sodium your weight was up about ${"%.1f".format(yHigh - yLow)} kg the next morning (mostly water)." },
             { g, _ -> sodiumTip("sodium-weight", g, "Salty days show up on your scale the next morning as water weight.") }),
         Hypothesis("sodium-bp", Metric.SODIUM, Metric.SYSTOLIC, true, +1,
@@ -249,7 +295,31 @@ object InsightEngine {
             if (g.sleepH < target) GoalChange(GoalField.SLEEP, g.sleepH, target) else null)
     }
 
-    private fun stepTip(id: String, g: CurrentGoals, why: String): Tip =
+    /** A clock time for an hour that may run past 24 (bedtimes after midnight). */
+    private fun clk(h: Double) = Metric.clock(h % 24)
+
+    // The sleep tips share ids, so several links behind the same advice give one tip
+    private fun bedtimeTip(split: Double, why: String) = Tip(
+        "bedtime-earlier", "Get to bed a little earlier",
+        "$why Aim to be in bed by ${clk(min(split, 23.5) - 0.5)}, and keep screens out of the last half hour.", null
+    )
+
+    private fun steadyBedtimeTip(why: String) = Tip(
+        "steady-bedtime", "Keep a steady bedtime",
+        "$why Going to bed within the same half hour every night, weekends too, is one of the strongest sleep habits.", null
+    )
+
+    private fun restlessTip(why: String) = Tip(
+        "restless-night", "Calmer nights, calmer appetite",
+        "$why A cool, dark room, no caffeine after noon, little alcohol and 3 hours between dinner and bed all help you stay asleep.", null
+    )
+
+    private fun lateMealTip(split: Double, why: String) = Tip(
+        "late-meal-night", "Leave 3 hours between dinner and bed",
+        "$why Try to finish eating before ${Metric.clock(min(split, 20.0))}.", null
+    )
+
+    private fun stepTip(id: String,g: CurrentGoals, why: String): Tip =
         Tip(id, "Step it up a little", "$why Add 1,000 steps a day, about a 10-minute walk.",
             GoalChange(GoalField.STEPS, g.steps, g.steps + 1000))
 
@@ -329,7 +399,9 @@ object InsightEngine {
         Metric.SLEEP to 0.33, Metric.RESTING_HR to 2.0, Metric.STEPS to 1000.0, Metric.SYSTOLIC to 4.0,
         Metric.KCAL to 150.0, Metric.SODIUM to 300.0, Metric.SUGAR to 8.0, Metric.FIBER to 4.0,
         Metric.PROTEIN to 10.0, Metric.WATER to 300.0, Metric.WEIGHT to 0.5,
-        Metric.FAST to 1.0, Metric.EATING_WINDOW to 1.0
+        Metric.FAST to 1.0, Metric.EATING_WINDOW to 1.0,
+        Metric.BEDTIME to 0.5, Metric.WAKE_TIME to 0.5, Metric.AWAKE to 10.0, Metric.SLEEP_EFFICIENCY to 3.0,
+        Metric.DEEP_SLEEP to 10.0, Metric.REM_SLEEP to 10.0, Metric.BEDTIME_SHIFT to 0.33
     )
 
     /** Last 14 days against the 14 before, for each measure with at least 5 days in both halves. */
@@ -383,6 +455,20 @@ object InsightEngine {
             "You averaged ${"%.1f".format(sleep.average())} h of sleep this week. Under 7 h makes cravings and overeating more likely.",
             if (g.sleepH < 7.0) GoalChange(GoalField.SLEEP, g.sleepH, 7.0) else null
         )
+        val shifts = week.mapNotNull { it[Metric.BEDTIME_SHIFT] }
+        if (shifts.size >= 4 && shifts.average() > 1.0) out += steadyBedtimeTip(
+            "This week your bedtime was about ${h1(shifts.average())} off your usual time on an average night."
+        )
+        val efficiency = week.mapNotNull { it[Metric.SLEEP_EFFICIENCY] }
+        if (efficiency.size >= 4 && efficiency.average() < 85) out += Tip(
+            "sleep-efficiency", "Make your time in bed count",
+            "You were asleep for ${n0(efficiency.average())}% of your time in bed this week; 85% or more is healthy. " +
+                "Go to bed when you're sleepy, and get up if you lie awake for more than 20 minutes.", null
+        )
+        val bedtimes = week.mapNotNull { it[Metric.BEDTIME] }
+        if (bedtimes.size >= 4 && bedtimes.average() >= 24.5 && sleep.isNotEmpty() && sleep.average() < g.sleepH) out += bedtimeTip(
+            bedtimes.average(), "You've been going to bed around ${clk(bedtimes.average())} and sleeping less than your goal."
+        )
         val fasts = week.mapNotNull { it[Metric.FAST] }
         if (fasts.size >= 5 && fasts.count { it >= g.fastH } >= 5) out += Tip(
             "fast-week-${g.fastH.roundToLong()}", "Steady fasting rhythm",
@@ -399,6 +485,16 @@ object InsightEngine {
                 "You're eating ${n0(t.change)} g more added sugar a day than two weeks ago.", GoalChange(GoalField.SUGAR, g.sugar, roundTo(g.sugar * 0.9, 5.0)))
             t.metric == Metric.EATING_WINDOW && t.change >= 1.5 -> Tip("window-trend", "Your eating window is getting longer",
                 "You're eating over ${h1(t.recent)} a day, up from ${h1(t.before)} two weeks ago. Late snacks are the usual cause.", null)
+            t.metric == Metric.BEDTIME && t.change >= 0.75 -> Tip("bedtime-trend", "Your bedtime is drifting later",
+                "You've been going to bed around ${clk(t.recent)}, up from ${clk(t.before)} two weeks ago. " +
+                    "Later nights usually mean shorter sleep and a bigger appetite the next day.", null)
+            t.metric == Metric.AWAKE && t.good == false -> restlessTip(
+                "You've been awake ${n0(t.change)} minutes longer a night than two weeks ago.")
+            t.metric == Metric.DEEP_SLEEP && t.good == false -> Tip("deep-trend", "Less deep sleep lately",
+                "You're getting ${n0(-t.change)} minutes less deep sleep a night than two weeks ago. Daytime activity, " +
+                    "a cooler room and an earlier dinner all help it come back.", null)
+            t.metric == Metric.BEDTIME_SHIFT && t.good == false -> steadyBedtimeTip(
+                "Your bedtime has become less regular over the last two weeks.")
             t.metric == Metric.RESTING_HR && t.good == true -> Tip("rhr-improving", "Your fitness is improving",
                 "Your resting heart rate dropped ${n0(-t.change)} bpm in two weeks. Whatever you're doing, keep going!", null)
             t.metric == Metric.RESTING_HR && t.good == false -> Tip("rhr-rising", "Your resting heart rate is up",

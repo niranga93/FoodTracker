@@ -177,7 +177,7 @@ fun InsightsPage(db: MealDb) {
     // The coach's weekly review, written by Gemini from last week's log
     Label("Your week, reviewed")
     if (rememberAiAvailable()) WeeklyReviewCard(db, remember { GoalStore(context) })
-    else AiLockedCard("Weekly review", "Add your free Gemini key to get a short review of your week.")
+    else AiLockedCard("Weekly review", "Add an AI key in Connections to get a short review of your week.")
 
     Muted(
         "Links show what tends to happen together in your own data, not proof that one causes the other. " +

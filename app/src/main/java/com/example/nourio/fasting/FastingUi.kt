@@ -16,7 +16,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.border
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -384,12 +386,25 @@ fun FastingPage(db: MealDb) {
     WidgetCard("Your fasting goal") {
         Muted("Hours between your last meal and your first meal the next day. The second number is your eating window.")
         Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            // Five equal segments that always fit the card. Material chips add fixed side padding,
+            // which wrapped "20:4" and clipped "12:12" on phone widths.
             Fasting.GOALS.forEach { g ->
-                FilterChip(
-                    selected = goal == g,
-                    onClick = { goal = g; prefs.goalH = g; Reminders.schedule(context) },
-                    label = { Text(ratio(g)) }
-                )
+                val selected = goal == g
+                Box(
+                    Modifier.weight(1f).height(40.dp).clip(RoundedCornerShape(10.dp))
+                        .background(if (selected) cs.secondaryContainer else Color.Transparent)
+                        .border(1.dp, if (selected) cs.secondaryContainer else cs.outlineVariant, RoundedCornerShape(10.dp))
+                        .clickable { goal = g; prefs.goalH = g; Reminders.schedule(context) }
+                        .semantics { this.selected = selected },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        ratio(g), maxLines = 1, softWrap = false,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (selected) cs.onSecondaryContainer else cs.onSurfaceVariant
+                    )
+                }
             }
         }
         Muted(

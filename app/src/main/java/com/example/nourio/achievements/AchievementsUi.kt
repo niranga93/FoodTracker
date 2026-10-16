@@ -58,37 +58,6 @@ private fun rememberAchievement(db: MealDb): Achievement? {
     return a
 }
 
-/** Home: the logging streak and the next badge. Opens the full page. */
-@Composable
-fun StreakCard(db: MealDb) {
-    val a = rememberAchievement(db) ?: return
-    val openPage = LocalOpenPage.current
-    val s = a.streaks
-    AppCard(Modifier.fillMaxWidth().clickable { openPage("badges") }) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(if (s.current > 0) "🔥" else "🌱", fontSize = 30.sp)
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    if (s.current > 0) "${s.current}-day logging streak!"
-                    else "Log a meal to start a streak",
-                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold
-                )
-                val next = a.next
-                Text(
-                    buildString {
-                        if (s.best > s.current) append("Best ${days(s.best)}  ·  ")
-                        append("${a.unlockedCount} of ${a.badges.size} badges")
-                        if (next != null) append("  ·  next: ${next.badge.title}")
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
 /** The "badges" page: streak numbers, then every badge with its progress. */
 @Composable
 fun BadgesPage(db: MealDb) {

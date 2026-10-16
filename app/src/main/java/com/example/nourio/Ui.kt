@@ -185,7 +185,7 @@ fun RefreshBox(topInset: Dp = 0.dp, content: @Composable () -> Unit) {
 val LocalOpenPage = staticCompositionLocalOf<(String) -> Unit> { {} }
 
 @Composable
-fun rememberAiAvailable(): Boolean = GeminiKeys.available.collectAsState().value
+fun rememberAiAvailable(): Boolean = com.example.nourio.ai.AiSettings.available.collectAsState().value
 
 /** Shown in place of an AI feature while no Gemini key is connected. */
 @Composable

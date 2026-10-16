@@ -3,6 +3,8 @@ package com.example.nourio
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -63,21 +65,16 @@ fun IntakeScreen(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 100.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // Same header as Home: the date, with History where Home has Settings
         item {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Intake", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                TextButton(onClick = onOpenHistory) { Text("History") }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) { DateNavigator(dayOffset, onDayChange) }
+                Spacer(Modifier.width(8.dp))
+                RoundNavButton(onClick = onOpenHistory) { Icon(Icons.Filled.DateRange, contentDescription = "History") }
             }
         }
-        item { DateNavigator(dayOffset, onDayChange) }
 
-        if (features.isOn("in_sources")) item { CalorieSourcesCard(totals) }
-        if (features.isOn("in_limits")) item { NutrientsCard(totals, goals, sugarGoal, fatGoal) }
-
+        // What you logged comes first: it's what this tab is for
         item {
             Row(
                 Modifier.fillMaxWidth(),
@@ -143,12 +140,13 @@ fun IntakeScreen(
             }
         }
 
-        if (features.isOn("in_timing")) item { MealTimingCard(meals) }
-        if (features.isOn("in_top")) item { BiggestItemsCard(meals) }
+        // Then what it adds up to, water, and the patterns behind it
+        if (features.isOn("in_limits") && meals.isNotEmpty()) item { NutritionCard(totals, goals, sugarGoal, fatGoal) }
         if (features.isOn("in_water")) item { HydrationCard(dayOffset) }
+        if (features.isOn("in_top")) item { FoodPatternsCard(meals) }
         if (features.isOn("in_coach")) item {
             if (aiOn) CoachCard(db, goalStore, dayOffset)
-            else AiLockedCard("Coach note", "Add your free Gemini key to get a short daily note.")
+            else AiLockedCard("Coach note", "Add an AI key in Connections to get a short daily note.")
         }
     }
 }

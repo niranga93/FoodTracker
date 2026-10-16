@@ -25,6 +25,10 @@ import java.time.ZoneId
 class ActionsTest {
     private val ctx: Context = ApplicationProvider.getApplicationContext()
 
+    // Consent is process-wide; a test here grants one, so never let it reach another test
+    @org.junit.Before fun fresh() = com.example.nourio.ai.AiConsent.resetForTests()
+    @org.junit.After fun clear() = com.example.nourio.ai.AiConsent.resetForTests()
+
     @Test
     fun reportIsParsed() {
         val p = Plan.parse("""{"kind":"action","action":{"type":"report_bug","title":"Scanner crashes","details":"It crashes on milk."},"answer":"Here's a draft."}""")

@@ -100,109 +100,39 @@ alcohol, honey. Use an empty list if none apply.
         )
     }
 
+    // Every request checks its consent first, then goes to the provider chosen in Connections
+
     suspend fun analyze(file: File): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
-            analyzeParts(
-                JSONArray()
-                    .put(JSONObject().put("text", PHOTO_INTRO + RULES))
-                    .put(
-                        JSONObject().put(
-                            "inline_data", JSONObject()
-                                .put("mime_type", "image/jpeg")
-                                .put("data", encodeImage(file))
-                        )
-                    )
-            )
+            AiConsent.require(AiUse.PHOTO)          // never sent without the user's consent
+            Llm.complete(LlmRequest(null, listOf(LlmTurn("user", PHOTO_INTRO + RULES, encodeImage(file))), RESPONSE_SCHEMA))
         }
     }
 
     /** Same JSON as [analyze], from a typed or spoken meal description. */
     suspend fun analyzeText(description: String): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
-            analyzeParts(
-                JSONArray()
-                    .put(JSONObject().put("text", TEXT_INTRO + RULES))
-                    .put(JSONObject().put("text", "Meal: $description"))
-            )
+            AiConsent.require(AiUse.TEXT)
+            Llm.complete(LlmRequest(TEXT_INTRO + RULES, listOf(LlmTurn("user", "Meal: $description")), RESPONSE_SCHEMA))
         }
     }
 
-    private suspend fun analyzeParts(parts: JSONArray): String {
-        val body = JSONObject()
-            .put("contents", JSONArray().put(JSONObject().put("parts", parts)))
-            .put(
-                "generationConfig",
-                JSONObject()
-                    .put("responseMimeType", "application/json")
-                    .put("responseSchema", RESPONSE_SCHEMA)
-            )
-
-        val raw = callWithFailover(body.toString())
-        val partsOut = JSONObject(raw)
-            .getJSONArray("candidates").getJSONObject(0)
-            .getJSONObject("content").getJSONArray("parts")
-        return buildString {
-            for (i in 0 until partsOut.length()) {
-                append(partsOut.getJSONObject(i).optString("text", ""))
-            }
-        }.trim()
-    }
-
     /** Text-only request, used by the AI coach. */
-    suspend fun askText(system: String, user: String): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun askText(system: String, user: String, use: AiUse = AiUse.COACH): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
-            val body = JSONObject()
-                .put(
-                    "systemInstruction",
-                    JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system)))
-                )
-                .put(
-                    "contents",
-                    JSONArray().put(
-                        JSONObject().put("role", "user")
-                            .put("parts", JSONArray().put(JSONObject().put("text", user)))
-                    )
-                )
-                .put("generationConfig", JSONObject().put("temperature", 0.4).put("maxOutputTokens", 1024))
-
-            val raw = callWithFailover(body.toString())
-            val partsOut = JSONObject(raw)
-                .getJSONArray("candidates").getJSONObject(0)
-                .getJSONObject("content").getJSONArray("parts")
-            buildString {
-                for (i in 0 until partsOut.length()) append(partsOut.getJSONObject(i).optString("text", ""))
-            }.trim()
+            AiConsent.require(use)
+            Llm.complete(LlmRequest(system, listOf(LlmTurn("user", user)), temperature = 0.4, maxTokens = 1024))
         }
     }
 
     /** A conversation answered as JSON in [schema]. [turns] are (role, text) pairs, oldest first. */
-    suspend fun askJson(system: String, turns: List<Pair<String, String>>, schema: JSONObject): Result<String> =
+    suspend fun askJson(system: String, turns: List<Pair<String, String>>, schema: JSONObject, use: AiUse = AiUse.ASSISTANT): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
-                val contents = JSONArray()
-                turns.forEach { (role, text) ->
-                    contents.put(JSONObject().put("role", role).put("parts", JSONArray().put(JSONObject().put("text", text))))
-                }
-                val body = JSONObject()
-                    .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
-                    .put("contents", contents)
-                    .put(
-                        "generationConfig", JSONObject()
-                            .put("temperature", 0.2)
-                            .put("responseMimeType", "application/json")
-                            .put("responseSchema", schema)
-                    )
-                val partsOut = JSONObject(callWithFailover(body.toString()))
-                    .getJSONArray("candidates").getJSONObject(0)
-                    .getJSONObject("content").getJSONArray("parts")
-                buildString {
-                    for (i in 0 until partsOut.length()) append(partsOut.getJSONObject(i).optString("text", ""))
-                }.trim()
+                AiConsent.require(use)
+                Llm.complete(LlmRequest(system, turns.map { (role, text) -> LlmTurn(role, text) }, schema, temperature = 0.2))
             }
         }
-
-    /** Every request goes through [GeminiRouter]: one key until it fails, every model on it first. */
-    private suspend fun callWithFailover(bodyJson: String): String = GeminiRouter.generate(bodyJson)
 
     private fun encodeImage(file: File): String {
         val bmp = ImageUtil.loadUpright(file, 1280) ?: error("Could not read the photo")

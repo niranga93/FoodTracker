@@ -79,14 +79,26 @@ fun ProfileHub(db: MealDb, onOpenPage: (String) -> Unit, inner: PaddingValues) {
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        HeroCard(profile.name, profileLine(profile), weightNow, profile.bmi, dailyGoal, nf) { onOpenPage("me") }
+        // Each number appears once on this page: weight in the journey (or Weigh-ins), the calorie goal
+        // and BMI in the header, the streak as the header's third tile
+        var streak by remember { mutableStateOf<com.example.nourio.achievements.Achievement?>(null) }
+        LaunchedEffect(Unit) {
+            streak = runCatching { com.example.nourio.achievements.Achievements.evaluate(context, db) }.getOrNull()
+            // Celebrate badges earned since the last look
+            streak?.newlyUnlocked?.takeIf { it.isNotEmpty() }?.let { b ->
+                android.widget.Toast.makeText(
+                    context, if (b.size == 1) "Badge unlocked: ${b[0].emoji} ${b[0].title}" else "${b.size} badges unlocked!",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+        HeroCard(profile.name, profileLine(profile), profile.bmi, dailyGoal, streak, nf,
+            onEdit = { onOpenPage("me") }, onStreak = { onOpenPage("badges") })
 
-        if (plan.targetKg > 0 && weights.isNotEmpty()) {
+        val journey = plan.targetKg > 0 && weights.isNotEmpty()
+        if (journey) {
             JourneyCard(weights.first().kg, weightNow, plan.targetKg, plan.paceKgPerWeek) { onOpenPage("goals") }
         }
-
-        // Logging streak, badge count and the next badge; opens the full Streaks & badges page
-        com.example.nourio.achievements.StreakCard(db)
 
         Section("Health") {
             IconRow(
@@ -107,23 +119,24 @@ fun ProfileHub(db: MealDb, onOpenPage: (String) -> Unit, inner: PaddingValues) {
             Divider()
             IconRow(
                 Icons.Filled.DateRange, MaterialTheme.colorScheme.tertiary, "Weigh-ins",
-                weights.lastOrNull()?.let { "Latest ${it.kg.f1()} kg  ·  ${weights.size} entries" } ?: "No entries yet"
+                weights.lastOrNull()?.let { last ->
+                    // The journey above already shows the weight, so say how often instead
+                    if (journey) "${weights.size} entries  ·  last on ${java.text.SimpleDateFormat("EEE d MMM", java.util.Locale.getDefault()).format(java.util.Date(last.ts))}"
+                    else "Latest ${last.kg.f1()} kg  ·  ${weights.size} entries"
+                } ?: "No entries yet"
             ) { onOpenPage("weight") }
         }
 
         Section("Your plan") {
-            IconRow(
-                Icons.Filled.Person, MaterialTheme.colorScheme.primary, "Personal details",
-                if (profile.heightCm > 0 && profile.weightKg > 0)
-                    "${profile.heightCm.f0()} cm  ·  ${profile.weightKg.f1()} kg" else "Add height, weight and age"
-            ) { onOpenPage("me") }
-            Divider()
+            // Personal details are the pencil on the header; calories and target are shown above,
+            // so the goals row lists the nutrient goals instead
             IconRow(
                 Icons.Filled.Star, Amber, "Goals & target",
-                buildString {
-                    append(if (dailyGoal > 0) "${nf.format(dailyGoal.toLong())} kcal a day" else "No goal yet")
-                    if (plan.targetKg > 0) append("  ·  target ${plan.targetKg.f1()} kg")
-                }
+                listOfNotNull(
+                    goals.protein.takeIf { it > 0 }?.let { "protein ${it.f0()} g" },
+                    goals.fiber.takeIf { it > 0 }?.let { "fiber ${it.f0()} g" },
+                    goals.addedSugar.takeIf { it > 0 }?.let { "added sugar ≤ ${it.f0()} g" },
+                ).joinToString("  ·  ").replaceFirstChar { it.uppercase() }.ifBlank { "Calories, nutrients and target weight" }
             ) { onOpenPage("goals") }
             Divider()
             IconRow(
@@ -138,7 +151,14 @@ fun ProfileHub(db: MealDb, onOpenPage: (String) -> Unit, inner: PaddingValues) {
             IconRow(
                 Icons.Filled.Share, MaterialTheme.colorScheme.tertiary, "Connections",
                 listOf(
-                    if (keyCount > 0) "Gemini ${if (keyCount == 1) "1 key" else "$keyCount keys"}" else "No Gemini key",
+                    // The chosen AI service, and whether it's ready to use
+                    com.example.nourio.ai.AiSettings.provider.let { p ->
+                        when {
+                            p == com.example.nourio.ai.Provider.GEMINI && keyCount > 0 -> "Gemini ${if (keyCount == 1) "1 key" else "$keyCount keys"}"
+                            com.example.nourio.ai.AiSettings.isReady() -> "${p.label} · ${com.example.nourio.ai.AiSettings.model(p)}"
+                            else -> "No ${p.label} key"
+                        }
+                    },
                     if (health.enabled) "Health Connect" else null,
                     if (driveEmail != null) "Drive" else null
                 ).filterNotNull().joinToString("  ·  ")
@@ -180,11 +200,11 @@ private fun profileLine(p: com.example.nourio.data.Profile): String {
     ).joinToString("  ·  ").ifBlank { "Add your details for accurate estimates" }
 }
 
-/** Gradient header: avatar, name, and the three numbers people check most. */
+/** Gradient header: avatar, name, and three numbers: BMI, the daily calorie goal and the logging streak. */
 @Composable
 private fun HeroCard(
-    name: String, line: String, weight: Double, bmi: Double?, dailyGoal: Double,
-    nf: NumberFormat, onEdit: () -> Unit
+    name: String, line: String, bmi: Double?, dailyGoal: Double,
+    streak: com.example.nourio.achievements.Achievement?, nf: NumberFormat, onEdit: () -> Unit, onStreak: () -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
     val gradient = Brush.linearGradient(listOf(cs.primary.copy(alpha = 0.32f), cs.tertiary.copy(alpha = 0.22f), cardContainer()))
@@ -226,7 +246,6 @@ private fun HeroCard(
             }
             Spacer(Modifier.height(18.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                HeroStat("Weight", if (weight > 0) "${weight.f1()} kg" else "—", null, Modifier.weight(1f))
                 val (label, good) = when {
                     bmi == null -> "add height" to true
                     bmi < 18.5 -> "below range" to false
@@ -235,6 +254,12 @@ private fun HeroCard(
                 }
                 HeroStat("BMI", bmi?.f1() ?: "—", label, Modifier.weight(1f), if (good) cs.primary else Amber)
                 HeroStat("Daily goal", if (dailyGoal > 0) nf.format(dailyGoal.toLong()) else "—", "kcal", Modifier.weight(1f))
+                val s = streak?.streaks?.current
+                HeroStat(
+                    "Streak", s?.let { "🔥 $it" } ?: "—",
+                    streak?.let { "${it.unlockedCount}/${it.badges.size} badges" } ?: "days",
+                    Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).clickable(onClick = onStreak)
+                )
             }
         }
     }

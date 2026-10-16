@@ -35,6 +35,8 @@ class AnalyzePendingWorker(context: Context, params: WorkerParameters) : Corouti
         val ctx = applicationContext
         NutritionLookup.init(ctx)
         PortionStore.init(ctx)
+        // Queued photos are sent only with photo consent; without it they wait, untouched
+        if (!com.example.nourio.ai.AiConsent.isGranted(ctx, com.example.nourio.ai.AiUse.PHOTO)) return Result.success()
 
         var retry = false
         for (p in PendingMeals.all(ctx).filter { it.status == PendingStatus.WAITING }) {

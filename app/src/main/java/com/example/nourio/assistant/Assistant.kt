@@ -47,8 +47,8 @@ How to plan:
   - delete_data: `scope` is meals, water, weights, favorites, chat or everything. Add `range` only when the
     user names dates; leave it out for "all my meals". Use everything only when they clearly ask to erase
     all their data. answer: one sentence saying the card shows exactly what would go.
-  - withdraw_consent: `consent` is ai_coach, assistant, health_connect, notifications, gemini_keys,
-    drive_backup or all. Use all only when they clearly ask for every consent.
+  - withdraw_consent: `consent` is ai_photos, ai_text, ai_coach, assistant, health_connect, notifications,
+    ai_keys, drive_backup or all. Use all only when they clearly ask for every consent.
   - If it's unclear which data or consent they mean, use kind "general" and ask one short question.
 - kind "unsupported": the data doesn't exist in the catalog (for example blood sugar or mood). Say so
   kindly in `answer` and mention what you can answer instead.
@@ -109,11 +109,12 @@ Q: Is oatmeal a good breakfast?
 }
 
 /** The assistant's own consent: it only sends questions, but the user should know that. */
-class AssistantPrefs(context: Context) {
+class AssistantPrefs(private val context: Context) {
     private val p = context.getSharedPreferences("assistant", Context.MODE_PRIVATE)
+    // Kept with every other AI consent, so its switch in Data & privacy matches
     var consented: Boolean
-        get() = p.getBoolean("consent", false)
-        set(v) = p.edit { putBoolean("consent", v) }
+        get() = com.example.nourio.ai.AiConsent.isGranted(context, com.example.nourio.ai.AiUse.ASSISTANT)
+        set(v) = com.example.nourio.ai.AiConsent.set(context, com.example.nourio.ai.AiUse.ASSISTANT, v)
 
     // Where the floating bubble was left: which side, and how far down (0 top .. 1 bottom; -1 = not moved yet)
     var bubbleLeft: Boolean

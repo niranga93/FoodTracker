@@ -70,7 +70,7 @@ fun DescribeMealScreen(initial: String, onBack: () -> Unit, onSubmit: (String) -
             Text(
                 "Include amounts when you know them (\"2 eggs\", \"a large bowl\", \"200 g\"). " +
                     "Anything without an amount is counted as a typical portion. " +
-                    "Your description is sent to Google Gemini for analysis.",
+                    "Your description is sent to ${com.example.nourio.ai.AiSettings.provider.company} (${com.example.nourio.ai.AiSettings.provider.label}) for analysis.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

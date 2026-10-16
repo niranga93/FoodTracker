@@ -119,9 +119,7 @@ fun BurnedScreen(db: MealDb, dayOffset: Int, onDayChange: (Int) -> Unit, inner: 
                 }
             }
         } else {
-            if (dayOffset == 0 && features.isOn("burn_coach")) item {
-                com.example.nourio.exercise.ExerciseCard(day, week, body, remember { GoalStore(context).load().stepGoal }, bodyDays)
-            }
+            // Exercise suggestions come as the 6 pm notification; the weight outlook is on Weigh-ins
             if (features.isOn("burn_split")) item { BurnSplitCard(day, dayOffset, hasDeviceData) }
             if (features.isOn("burn_week") && week.isNotEmpty()) item { EatenBurnedCard(week) }
             if (features.isOn("burn_steps")) item { StepsCard(week, remember { GoalStore(context).load().stepGoal }) }
@@ -131,7 +129,6 @@ fun BurnedScreen(db: MealDb, dayOffset: Int, onDayChange: (Int) -> Unit, inner: 
                     item { WorkoutsCard(first, dayOffset) }
                 }
             }
-            if (features.isOn("burn_outlook")) item { OutlookCard(db) }
             item {
                 Expandable("Source data") {
                     ActivityCard(dayOffset)

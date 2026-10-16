@@ -10,3 +10,17 @@
 #-keepclassmembers class fqcn.of.javascript.interface.for.webview {
 #   public *;
 #}
+# Anthropic Java SDK (Claude): its request and response classes are read and written by Jackson
+# through reflection, so R8 must keep them, Jackson itself, and the Kotlin metadata Jackson reads.
+-keep class com.anthropic.** { *; }
+-keep class com.fasterxml.jackson.** { *; }
+-keepattributes *Annotation*, Signature, InnerClasses, EnclosingMethod, RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations, KotlinMetadata
+-keep class kotlin.Metadata { *; }
+-dontwarn com.fasterxml.jackson.**
+-dontwarn com.anthropic.**
+-dontwarn java.beans.**
+-dontwarn org.w3c.dom.bootstrap.**
+# The SDK's schema generator (victools) refers to Java reflection types Android lacks; Nourio passes
+# its own schemas and never runs the generator
+-dontwarn java.lang.reflect.AnnotatedParameterizedType
+-dontwarn java.lang.reflect.AnnotatedType

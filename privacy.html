@@ -109,7 +109,7 @@
 
         <div class="card">
             <h2>Summary</h2>
-            <p>Nourio keeps your food log, profile and settings on your phone, and it has no accounts, ads or analytics. The app is run by <strong>NNRZONE</strong> ("we"). It sends data off your phone only for features you use: meal analysis and the AI coach (Google Gemini, using your own Gemini API key), recipe links you share (fetched from that website), food lookups and product searches (USDA FoodData Central and Open Food Facts), and optional backup to your own Google Drive. If you turn them on, it also reads from and writes to Health Connect on your phone.</p>
+            <p>Nourio keeps your food log, profile and settings on your phone, and it has no accounts, ads or analytics. The app is run by <strong>NNRZONE</strong> ("we"). It sends data off your phone only for features you use: meal analysis, the AI coach and Nourio Assistant (the AI service you choose, using your own API key), recipe links you share (fetched from that website), food lookups and product searches (USDA FoodData Central and Open Food Facts), and optional backup to your own Google Drive. If you turn them on, it also reads from and writes to Health Connect on your phone.</p>
         </div>
 
         <div class="card">
@@ -141,7 +141,7 @@
                 </thead>
                 <tbody>
                     <tr>
-                        <td><strong>Google Gemini API</strong></td>
+                        <td><strong>Your chosen AI service</strong>: Google Gemini (default), Anthropic Claude, OpenAI ChatGPT, xAI Grok, DeepSeek, Moonshot Kimi, Mistral, Alibaba Qwen or OpenRouter</td>
                         <td>A resized photo of your meal; a meal you type or speak; text you share to the app; the recipe text read from a page you share; for the AI coach, a text summary of one day</td>
                         <td>Identify foods and estimate portions; write the coach summary</td>
                         <td>When you analyze a photo, describe a meal, share a photo, text or link to Nourio, or tap <em>Get summary</em></td>
@@ -215,8 +215,8 @@
         </div>
 
         <div class="card">
-            <h2>AI Features and Gemini</h2>
-            <p>Each Gemini request contains only what is listed here:</p>
+            <h2>AI Features and Your AI Service</h2>
+            <p>You choose one AI service under Profile, then Connections, and add your own API key for it. Requests go straight from your phone to that company; Nourio has no server in between. Only one service is used at a time, and switching to another turns off every AI consent so each feature asks again before sending anything to the new company. If you choose OpenRouter, it passes requests on to the company behind the model you pick. Each request contains only what is listed here:</p>
             <ul>
                 <li><strong>Photo analysis:</strong> a resized JPEG of the meal and fixed instructions. It includes no name, profile or health data.</li>
                 <li><strong>Text analysis:</strong> the meal you type or speak, or the text you share to the app, and fixed instructions. For a shared link, this is the recipe text read from that page (at most about 6,000 characters).</li>
@@ -224,7 +224,7 @@
                 <li><strong>Nourio Assistant:</strong> the question you type, your earlier questions in the same chat with the plans Gemini wrote for them, today's date, and a fixed list of the kinds of data the app keeps (for example "protein per day" or "hours asleep"). Gemini replies with a plan: which records to look at, over which dates, and how to add them up, plus a sentence with blanks. Your phone runs that plan on your own data and fills in the blanks. None of your meals, weigh-ins, Health Connect data, goals or results are sent, and the answers are not sent back to Gemini. You can also ask the assistant to delete data, withdraw a consent, or report a bug, a feature idea or a problem with your data. Gemini only suggests the action; the app shows exactly what will happen, and nothing changes until you confirm it on your phone. A report opens your own email app addressed to us, with the text for you to edit; it is sent only if you press send there, and it contains your logged data only if you add it yourself. You can choose to include the app version and phone model.</li>
                 <li><strong>Never sent:</strong> your name, year of birth, sex, height, weight, Health Connect data, or your Google account.</li>
             </ul>
-            <p>The AI coach and Nourio Assistant each ask for your consent before their first request. Saved summaries and the assistant's answers stay on your phone. Gemini features need your own Gemini API key, which you add under Profile, then Connections. Requests go to Google under the terms of your key. On the free tier, Google may use requests and responses to improve its products, and human reviewers may read them. Photograph only food, and share only text you are comfortable sending. Without a key, the Gemini features stay off.</p>
+            <p>Each of these four features (meal photo analysis, meal descriptions, the AI coach and Nourio Assistant) asks for your consent before it first sends anything, and tells you exactly what it sends. You can turn each one on or off at any time under Profile, then Data &amp; privacy, in "AI and your data"; while one is off, it sends nothing. Photos queued while offline are only analyzed if meal photo analysis is on. Saved summaries and the assistant's answers stay on your phone. Gemini features need your own Gemini API key, which you add under Profile, then Connections. Requests go to Google under the terms of your key. On the free tier, Google may use requests and responses to improve its products, and human reviewers may read them. Photograph only food, and share only text you are comfortable sending. Without a key, the Gemini features stay off.</p>
             <p><em>AI summaries and portion estimates can be wrong.</em></p>
         </div>
 

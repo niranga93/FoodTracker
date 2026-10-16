@@ -19,7 +19,7 @@ fun PrivacyCard() {
     WidgetCard("Privacy") {
         Text(
             "Your log stays on this phone. Photos, meal descriptions, shared text and coach notes go to " +
-                "Google Gemini when you use them.",
+                "${com.example.nourio.ai.AiSettings.provider.company} (your chosen AI service) only when you use them and allow it.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

@@ -83,7 +83,7 @@ fun AssistantChat(db: MealDb, onClose: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf<String?>(null) }      // waiting for consent
     val list = rememberLazyListState()
-    val hasKey = remember { GeminiKeys.hasAny() }
+    val hasKey = remember { com.example.nourio.ai.AiSettings.isReady() }
     val firstName = remember { com.example.nourio.data.ProfileStore(context).load().name }   // stays on the phone
 
     LaunchedEffect(messages.size, busy) {
@@ -106,7 +106,7 @@ fun AssistantChat(db: MealDb, onClose: () -> Unit) {
                 },
                 onFailure = { e ->
                     AssistantSession.turns += Assistant.Turn(question, null)
-                    val msg = e.message?.takeIf { "Gemini key" in it }
+                    val msg = e.message?.takeIf { " key" in it }
                         ?: "I couldn't work that out just now. Check your connection and try again."
                     messages += ChatMessage(false, msg, error = true)
                 }
@@ -115,21 +115,12 @@ fun AssistantChat(db: MealDb, onClose: () -> Unit) {
         }
     }
 
+    // The same consent as every other AI feature; agreeing turns on its switch in Data & privacy
     pending?.let { q ->
-        AlertDialog(
-            onDismissRequest = { pending = null },
-            title = { Text("How Nourio Assistant works") },
-            text = {
-                Text(
-                    "Only your question is sent to Google's Gemini API, which replies with a recipe for the answer: " +
-                        "which records to look at and how to add them up. Your phone then works out the answer from your " +
-                        "own data. Your meals, weight, health data and profile are never sent.\n\n" +
-                        "On Gemini's free tier, Google may use your questions to improve its products, so don't type " +
-                        "anything you wouldn't want to share."
-                )
-            },
-            confirmButton = { TextButton(onClick = { prefs.consented = true; pending = null; send(q) }) { Text("Got it, ask") } },
-            dismissButton = { TextButton(onClick = { pending = null }) { Text("Cancel") } }
+        com.example.nourio.AiConsentDialog(
+            com.example.nourio.ai.AiUse.ASSISTANT,
+            onAgree = { pending = null; send(q) },
+            onDismiss = { pending = null }
         )
     }
 
@@ -229,7 +220,7 @@ private fun IntroBubble(name: String) {
             )
             IntroPoint(
                 "🔒", "How it stays private",
-                "Gemini only plans the answer. Your phone does the maths, so your data never leaves it."
+                "The AI only plans the answer. Your phone does the maths, so your data never leaves it."
             )
             IntroPoint(
                 "💡", "Good to know",
@@ -258,10 +249,10 @@ private fun EmptyState(hasKey: Boolean, onSetupKey: () -> Unit, onPick: (String)
     Column(Modifier.fillMaxWidth().padding(start = 42.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (!hasKey) {
             Text(
-                "To get started I need your free Gemini key. It takes about a minute.",
+                "To get started I need an AI key. Gemini's is free and takes about a minute.",
                 style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant
             )
-            OutlinedButton(onClick = onSetupKey) { Text("Add your Gemini key") }
+            OutlinedButton(onClick = onSetupKey) { Text("Add an AI key") }
             return@Column
         }
         Text("Try asking", style = MaterialTheme.typography.labelLarge, color = cs.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))

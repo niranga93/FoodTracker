@@ -52,7 +52,8 @@ data class ReviewUiState(
     val description: String = "",
     val items: List<FoodItem> = emptyList(),
     val error: String? = null,
-    val offline: Boolean = false     // photo not analyzed because there is no connection
+    val offline: Boolean = false,    // photo not analyzed because there is no connection
+    val needsConsent: com.example.nourio.ai.AiUse? = null   // waiting for the user to allow sending it to Gemini
 )
 
 /**
@@ -63,22 +64,40 @@ class ReviewViewModel(
     private val file: File?,
     private val text: String?,
     preloaded: Analysis? = null,
-    online: Boolean = true
+    private val online: Boolean = true
 ) : ViewModel() {
     private val _state = MutableStateFlow(ReviewUiState())
     val state: StateFlow<ReviewUiState> = _state.asStateFlow()
+
+    // A photo or a description: each has its own consent
+    private val use = if (file != null) com.example.nourio.ai.AiUse.PHOTO else com.example.nourio.ai.AiUse.TEXT
 
     init {
         when {
             preloaded != null ->
                 _state.value = ReviewUiState(isLoading = false, description = preloaded.description, items = preloaded.items)
-            !online && file != null -> _state.value = ReviewUiState(isLoading = false, offline = true)
-            else -> analyze()
+            // Ask first, even before queueing a photo for later: queued photos are sent too
+            !com.example.nourio.ai.AiConsent.isGranted(use) -> _state.value = ReviewUiState(isLoading = false, needsConsent = use)
+            else -> start()
         }
+    }
+
+    private fun start() {
+        if (!online && file != null) _state.value = ReviewUiState(isLoading = false, offline = true) else analyze()
+    }
+
+    /** The user allowed it in the consent dialog. */
+    fun consentGiven() {
+        _state.update { it.copy(needsConsent = null) }
+        start()
     }
 
     // Called from init, and again from the Retry button (only shown when not loading)
     fun analyze() {
+        if (!com.example.nourio.ai.AiConsent.isGranted(use)) {
+            _state.update { it.copy(isLoading = false, needsConsent = use) }
+            return
+        }
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null, offline = false) }
             val result = if (file != null) MealPipeline.run(file) else MealPipeline.runText(text.orEmpty())

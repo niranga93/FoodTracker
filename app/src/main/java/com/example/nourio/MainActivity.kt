@@ -118,6 +118,8 @@ class MainActivity : ComponentActivity() {
         com.example.nourio.energy.EnergyRepo.init(applicationContext)
         com.example.nourio.insights.InsightWorker.schedule(applicationContext)     // daily tip, keeps an existing schedule
         com.example.nourio.ai.GeminiKeys.init(applicationContext)
+        com.example.nourio.ai.AiSettings.init(applicationContext)     // which AI service, model and key
+        com.example.nourio.ai.AiConsent.init(applicationContext)      // nothing goes to Gemini without it
         Onboarding.init(applicationContext)                                        // the setup guide on the first start
         com.example.nourio.achievements.Achievements.init(applicationContext)
         // Channels exist from the first start, so Android lists Nourio's notification categories
@@ -187,8 +189,8 @@ class MainActivity : ComponentActivity() {
     private fun handleShare(intent: Intent?) {
         if (intent?.action != Intent.ACTION_SEND) return
         val type = intent.type ?: return
-        if (!com.example.nourio.ai.GeminiKeys.hasAny()) {
-            Toast.makeText(this, "Photo and text sharing needs your free Gemini key", Toast.LENGTH_LONG).show()
+        if (!com.example.nourio.ai.AiSettings.isReady()) {
+            Toast.makeText(this, "Sharing meals needs an AI key. Add one in Connections.", Toast.LENGTH_LONG).show()
             nav.open(Screen.Page("connections"))
             return
         }
@@ -328,14 +330,24 @@ fun FoodApp(nav: NavViewModel = viewModel()) {
     }
 
     fun needKey(): Boolean {
-        if (com.example.nourio.ai.GeminiKeys.hasAny()) return false
-        Toast.makeText(context, "Add your free Gemini key first", Toast.LENGTH_LONG).show()
+        if (com.example.nourio.ai.AiSettings.isReady()) return false
+        Toast.makeText(context, "Add an AI key first", Toast.LENGTH_LONG).show()
         nav.open(Screen.Page("connections"))
         return true
     }
 
+    // Some services (DeepSeek) only read text: say so instead of opening the camera
+    fun photosOk(): Boolean {
+        if (com.example.nourio.ai.AiSettings.photosSupported()) return true
+        Toast.makeText(
+            context, "${com.example.nourio.ai.AiSettings.provider.label} can't read photos. Describe the meal instead, or switch AI service in Connections.",
+            Toast.LENGTH_LONG
+        ).show()
+        return false
+    }
+
     fun pickFromGallery() {
-        if (!needKey()) galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        if (!needKey() && photosOk()) galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     }
 
     fun go(target: Screen) {
@@ -360,7 +372,7 @@ fun FoodApp(nav: NavViewModel = viewModel()) {
                 goalStore = goalStore,
                 dayOffset = state.dayOffset,
                 onDayChange = nav::setDay,
-                onPhoto = { if (!needKey()) go(Screen.Camera) },
+                onPhoto = { if (!needKey() && photosOk()) go(Screen.Camera) },
                 onScan = { go(Screen.Barcode) },
                 onManual = { nav.open(Screen.Manual) },
                 onDescribe = { nav.open(Screen.Describe()) },
@@ -537,7 +549,7 @@ fun AddFab(
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             // Photo and Describe use Gemini, so they are locked until a key is added
-            val lockedHint = "Needs a Gemini key"
+            val lockedHint = "Needs an AI key"
             DropdownMenuItem(
                 enabled = aiEnabled,
                 text = { MenuLabel("Photo", if (aiEnabled) "Camera, or pick from gallery" else lockedHint) },
@@ -868,7 +880,16 @@ fun ReviewScreen(
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
         }
+        state.needsConsent?.let { use ->
+            AiConsentDialog(use, onAgree = { vm.consentGiven() }, onDismiss = onBack)
+        }
         when {
+            state.needsConsent != null -> Column(Modifier.weight(1f).padding(16.dp)) {
+                Text(
+                    "Nothing has been sent. Allow ${state.needsConsent!!.title.lowercase()} to analyze this meal, or go back and add it by hand.",
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             state.isLoading -> AnalyzingView(
                 "Analyzing your meal…",
                 "Identifying foods…",

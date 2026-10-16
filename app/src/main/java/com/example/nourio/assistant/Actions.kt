@@ -47,13 +47,15 @@ enum class DeleteScope(val key: String, val label: String) {
 }
 
 enum class Consent(val key: String, val label: String, val effect: String) {
+    AI_PHOTOS("ai_photos", "Meal photo analysis", "Meal photos are no longer sent to your AI service. You'll be asked again before the next one."),
+    AI_TEXT("ai_text", "Meal descriptions", "Typed, spoken and shared meal descriptions are no longer sent to your AI service until you allow it again."),
     AI_COACH("ai_coach", "AI coach", "The coach note will ask for your permission again before it sends anything."),
     ASSISTANT("assistant", "Nourio Assistant", "I'll ask for your permission again before your next question is sent."),
     HEALTH_CONNECT("health_connect", "Health Connect", "Nourio stops reading and writing Health Connect, and its access is removed there. Steps, sleep and heart data disappear from the app."),
     NOTIFICATIONS("notifications", "Tips and reminders", "The daily tip and all reminders are switched off."),
-    GEMINI_KEYS("gemini_keys", "Gemini keys", "Your Gemini keys are removed from this phone. Photo analysis, the coach and I stop working until you add a key again."),
+    GEMINI_KEYS("ai_keys", "AI keys", "Your AI keys (Gemini, Claude and any others) are removed from this phone. Photo analysis, the coach and I stop working until you add a key again."),
     DRIVE_BACKUP("drive_backup", "Google Drive backup", "Automatic backup to your Drive stops. The backup file already in your Drive stays there until you delete it."),
-    ALL("all", "every consent", "All of the above: AI coach, assistant, Health Connect, tips and reminders, Gemini keys and Drive backup.");
+    ALL("all", "every consent", "All of the above: every AI feature, Health Connect, tips and reminders, AI keys and Drive backup.");
 
     companion object {
         fun of(k: String?) = entries.firstOrNull { it.key == k }
@@ -109,7 +111,7 @@ object Actions {
             DeleteScope.CHAT -> DeletePreview(1, null, null, "This clears this conversation from your phone.")
             DeleteScope.EVERYTHING, null -> DeletePreview(1, null, null,
                 "This erases everything Nourio keeps on this phone: meals and photos, weigh-ins, water, goals, profile, " +
-                    "favorites, settings, Gemini keys and consents. Nourio will close and start fresh.")
+                    "favorites, settings, AI keys and consents. Nourio will close and start fresh.")
         }
     }
 
@@ -172,6 +174,8 @@ object Actions {
     /** Withdraws a confirmed consent and says what changed. */
     suspend fun withdraw(context: Context, c: Consent): String = withContext(Dispatchers.IO) {
         val all = c == Consent.ALL
+        if (all || c == Consent.AI_PHOTOS) com.example.nourio.ai.AiConsent.set(context, com.example.nourio.ai.AiUse.PHOTO, false)
+        if (all || c == Consent.AI_TEXT) com.example.nourio.ai.AiConsent.set(context, com.example.nourio.ai.AiUse.TEXT, false)
         if (all || c == Consent.AI_COACH) com.example.nourio.withdrawCoachConsent(context)
         if (all || c == Consent.ASSISTANT) AssistantPrefs(context).consented = false
         if (all || c == Consent.HEALTH_CONNECT) revokeHealthConnect(context)
@@ -185,6 +189,7 @@ object Actions {
         if (all || c == Consent.GEMINI_KEYS) {
             val keys = com.example.nourio.ai.GeminiKeys
             withContext(Dispatchers.Main) { (0 until keys.SLOTS).forEach { keys.remove(it) } }
+            com.example.nourio.ai.AiSettings.removeAllKeys(context)          // Claude, ChatGPT and the rest too
         }
         if (all) "Done. Every consent is withdrawn. You can turn things back on any time in Profile > Connections and Settings."
         else "Done. ${c.effect}"

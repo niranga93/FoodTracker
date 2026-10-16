@@ -49,12 +49,13 @@ fun withdrawCoachConsent(context: Context) {
     CoachPrefs(context).consented = false
 }
 
-private class CoachPrefs(context: Context) {
+private class CoachPrefs(private val context: Context) {
     private val p = context.getSharedPreferences("coach", Context.MODE_PRIVATE)
 
+    // The consent lives with the others, so the switch in Data & privacy and this stay the same
     var consented: Boolean
-        get() = p.getBoolean("consent", false)
-        set(v) { p.edit { putBoolean("consent", v) } }
+        get() = com.example.nourio.ai.AiConsent.isGranted(context, com.example.nourio.ai.AiUse.COACH)
+        set(v) { com.example.nourio.ai.AiConsent.set(context, com.example.nourio.ai.AiUse.COACH, v) }
 
     fun text(key: String): String? = p.getString("t_$key", null)
     fun time(key: String): Long = p.getLong("ts_$key", 0L)
@@ -161,9 +162,8 @@ fun CoachCard(db: MealDb, goalStore: GoalStore, dayOffset: Int) {
     }
 
     if (askConsent) {
-        CoachConsentDialog(
-            "Send this day to Gemini?",
-            "the day's foods, amounts and totals, your goals, water, estimated calories burned and diet preferences",
+        AiConsentDialog(
+            com.example.nourio.ai.AiUse.COACH,
             onAgree = {
                 prefs.consented = true
                 askConsent = false
@@ -229,23 +229,6 @@ private fun dietLine(context: Context): String? {
     return "Diet: ${diet.diets.joinToString(", ").ifBlank { "none stated" }}. " +
         "Allergies: ${labels.joinToString(", ").ifBlank { "none stated" }}. " +
         "Also avoids: ${diet.other.joinToString(", ").ifBlank { "nothing stated" }}."
-}
-
-@Composable
-private fun CoachConsentDialog(title: String, whatIsSent: String, onAgree: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Text(
-                "The AI coach sends $whatIsSent to Google's Gemini API to write the summary. " +
-                    "Your name, weight, age and other profile details are not sent. On the free tier, " +
-                    "Google may use this data to improve its products and humans may review it."
-            )
-        },
-        confirmButton = { TextButton(onClick = onAgree) { Text("Agree and continue") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
 }
 
 // ---------------------------------------------------------------- weekly review
@@ -356,9 +339,8 @@ fun WeeklyReviewCard(db: MealDb, goalStore: GoalStore) {
     }
 
     if (askConsent) {
-        CoachConsentDialog(
-            "Send your week to Gemini?",
-            "the last 7 days of foods, amounts, meal times and totals, your goals, water and diet preferences",
+        AiConsentDialog(
+            com.example.nourio.ai.AiUse.COACH,
             onAgree = {
                 prefs.consented = true
                 askConsent = false

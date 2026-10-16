@@ -39,6 +39,7 @@ object GeminiKeys {
 
     private fun refresh() {
         _available.value = list().isNotEmpty()
+        AiSettings.refresh()          // "AI available" follows whichever provider is chosen
     }
 
     fun init(context: Context) {

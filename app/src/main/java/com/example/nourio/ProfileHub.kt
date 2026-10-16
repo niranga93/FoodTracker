@@ -66,13 +66,14 @@ fun PageScreen(id: String, db: MealDb, goalStore: GoalStore, onBack: () -> Unit)
                 "me" -> PersonalCard()
                 "goals" -> { GoalsCard(goalStore, db); TargetCard() }
                 "diet" -> DietCard()
-                "weight" -> WeightCard()
+                "weight" -> { WeightCard(); OutlookCard(db) }   // weigh-ins, then where the trend is heading
                 "connections" -> {
-                    GeminiKeyCard(); HealthConnectorCard(); HealthExtrasCard()
+                    AiServiceCard(); HealthConnectorCard(); HealthExtrasCard()   // AI service first: Gemini's key card is inside it
                     BackupCard(db, goalStore)
                     BackupFileCard(db, goalStore)
                 }
                 "data" -> {
+                    AiConsentCard()          // what may go to Gemini, one switch per feature
                     DataCard(db)
                     PrivacyCard()
                 }

@@ -122,34 +122,57 @@ private fun Donut(parts: List<Pair<Double, Color>>, top: String, bottom: String,
     }
 }
 
+/** Share of calories, with the guideline range it's judged against (WHO / US Dietary Guidelines). */
 @Composable
-private fun SourceRow(label: String, share: Double, grams: Double, color: Color) {
+private fun SourceRow(label: String, share: Double, range: IntRange, color: Color) {
+    val pct = (share * 100).toInt()
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(10.dp).clip(CircleShape).background(color))
         Spacer(Modifier.width(8.dp))
-        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        Text("${(share * 100).f0()}%  ·  ${grams.f0()} g", style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium)
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+            Text("aim ${range.first}–${range.last}%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(
+            "$pct%", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+            color = if (pct in range) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.secondary
+        )
     }
 }
 
+/**
+ * The day's nutrition in one card. The donut shows where calories come from (as shares, against the
+ * usual healthy ranges); the rows below give each nutrient in grams against its goal, macros first,
+ * then the quality markers: fiber, sugar (added vs natural) and sodium.
+ */
 @Composable
-fun CalorieSourcesCard(t: Totals) {
+fun NutritionCard(t: Totals, g: Goals, sugarGoal: Double, fatGoal: Double) {
     val c = t.carbs * 4.0
     val p = t.protein * 4.0
     val f = t.fat * 9.0
     val total = c + p + f
-    if (total <= 0) return
-    WidgetCard("Where your calories come from") {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Donut(listOf(c to SrcCarbs, p to SrcProtein, f to SrcFat), t.kcal.f0(), "kcal", Modifier.size(120.dp))
-            Spacer(Modifier.width(20.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SourceRow("Carbs", c / total, t.carbs, SrcCarbs)
-                SourceRow("Protein", p / total, t.protein, SrcProtein)
-                SourceRow("Fat", f / total, t.fat, SrcFat)
+    WidgetCard("Nutrition") {
+        if (total > 0) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Donut(listOf(c to SrcCarbs, p to SrcProtein, f to SrcFat), t.kcal.f0(), "kcal", Modifier.size(112.dp))
+                Spacer(Modifier.width(20.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SourceRow("Carbs", c / total, 45..65, SrcCarbs)
+                    SourceRow("Protein", p / total, 10..35, SrcProtein)
+                    SourceRow("Fat", f / total, 20..35, SrcFat)
+                }
             }
+            HorizontalDivider(Modifier.padding(vertical = 14.dp))
         }
+        NutrientRow("Protein", t.protein, "g", g.protein, NutrientKind.TARGET)
+        NutrientRow("Carbs", t.carbs, "g", g.carbs, NutrientKind.LIMIT)
+        NutrientRow("Fat", t.fat, "g", fatGoal, NutrientKind.LIMIT)
+        Column(Modifier.padding(start = 16.dp)) {
+            NutrientRow("Saturated", t.satFat, "g", g.satFat, NutrientKind.LIMIT)
+        }
+        NutrientRow("Fiber", t.fiber, "g", g.fiber, NutrientKind.TARGET)
+        SugarRows(t, sugarGoal)
+        NutrientRow("Sodium", t.sodium, "mg", g.sodiumMg, NutrientKind.LIMIT)
     }
 }
 
@@ -173,37 +196,54 @@ private fun HBarRow(label: String, value: String, fraction: Float, color: Color)
     }
 }
 
+/**
+ * Where the day's food came from: when (four time slots, as shares of the day) and what (the five
+ * biggest items). Late-night eating is coloured, since it's the slot linked with poorer sleep.
+ */
 @Composable
-fun MealTimingCard(meals: List<Meal>) {
-    if (meals.isEmpty()) return
-    val labels = listOf("Morning", "Midday", "Evening", "Late night")
+fun FoodPatternsCard(meals: List<Meal>) {
+    val total = meals.sumOf { it.totals.kcal }
+    if (meals.isEmpty() || total <= 0) return
+    val cs = MaterialTheme.colorScheme
+    val labels = listOf("Morning", "Midday", "Evening", "Late")
     val sums = DoubleArray(4)
     meals.forEach { m ->
         val hour = Calendar.getInstance().apply { timeInMillis = m.timestamp }.get(Calendar.HOUR_OF_DAY)
         val block = when (hour) { in 5..10 -> 0; in 11..14 -> 1; in 15..20 -> 2; else -> 3 }
         sums[block] += m.totals.kcal
     }
-    val maxV = sums.max().coerceAtLeast(1.0)
-    WidgetCard("When you ate") {
-        labels.forEachIndexed { i, label ->
-            HBarRow(label, if (sums[i] > 0) sums[i].f0() else "—", (sums[i] / maxV).toFloat(),
-                MaterialTheme.colorScheme.primary)
-        }
-    }
-}
-
-@Composable
-fun BiggestItemsCard(meals: List<Meal>) {
     val top = meals.flatMap { it.items }
         .groupBy { it.name.trim().lowercase() }
         .map { (_, list) -> list.first().name to list.sumOf { it.kcal } }
         .sortedByDescending { it.second }
         .take(5)
-    if (top.isEmpty()) return
-    val maxV = top.first().second.coerceAtLeast(1.0)
-    WidgetCard("Biggest items today") {
-        top.forEach { (name, kcal) ->
-            HBarRow(name, kcal.f0(), (kcal / maxV).toFloat(), MaterialTheme.colorScheme.secondary)
+    WidgetCard("Food patterns") {
+        Text("When you ate", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            labels.forEachIndexed { i, label ->
+                val share = sums[i] / total
+                val color = if (i == 3 && sums[i] > 0) cs.secondary else cs.primary
+                Column(
+                    Modifier.weight(1f).clip(RoundedCornerShape(12.dp))
+                        .background(if (sums[i] > 0) color.copy(alpha = (0.08f + share.toFloat() * 0.5f)) else cs.surfaceVariant.copy(alpha = 0.4f))
+                        .padding(vertical = 10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(if (sums[i] > 0) "${(share * 100).toInt()}%" else "—", style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold, color = if (sums[i] > 0) color else cs.onSurfaceVariant)
+                    Text(label, style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
+                }
+            }
+        }
+        if (top.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp))
+            Text("Biggest items", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+            Spacer(Modifier.height(4.dp))
+            val maxV = top.first().second.coerceAtLeast(1.0)
+            top.forEach { (name, kcal) ->
+                HBarRow(name, kcal.f0(), (kcal / maxV).toFloat(), cs.secondary)
+            }
         }
     }
 }
@@ -417,16 +457,3 @@ private fun SugarRows(t: Totals, addedGoal: Double) {
     }
 }
 
-/** Every tracked nutrient. Rows with a goal get a progress bar. */
-@Composable
-fun NutrientsCard(t: Totals, g: Goals, sugarGoal: Double, fatGoal: Double) {
-    WidgetCard("Nutrients today") {
-        SugarRows(t, sugarGoal)
-        NutrientRow("Fat", t.fat, "g", fatGoal, NutrientKind.LIMIT)
-        NutrientRow("Saturated fat", t.satFat, "g", g.satFat, NutrientKind.LIMIT)
-        NutrientRow("Carbs", t.carbs, "g", g.carbs, NutrientKind.LIMIT)
-        NutrientRow("Protein", t.protein, "g", g.protein, NutrientKind.TARGET)
-        NutrientRow("Fiber", t.fiber, "g", g.fiber, NutrientKind.TARGET)
-        NutrientRow("Sodium", t.sodium, "mg", g.sodiumMg, NutrientKind.LIMIT)
-    }
-}

@@ -71,6 +71,15 @@ android {
             }
         }
     }
+    // The Anthropic SDK's Apache HTTP libraries each carry the same licence metadata files
+    packaging {
+        resources {
+            excludes += setOf(
+                "META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/INDEX.LIST",
+                "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+            )
+        }
+    }
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
@@ -109,6 +118,7 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.okhttp)
+    implementation(libs.anthropic.java)          // Claude, through the official SDK
     implementation(libs.mlkit.barcode.scanning)
     implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.lifecycle.viewmodel.compose)

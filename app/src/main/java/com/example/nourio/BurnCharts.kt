@@ -90,26 +90,8 @@ fun EatenBurnedCard(days: List<DayEnergy>) {
                 }
             }
         }
-        // Over-burn days push the eaten bar to full height, so mark them in the net row instead
+        // Each day's net is on Home's week card; here the bars show eaten against burned
         Spacer(Modifier.height(6.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ordered.forEach { d ->
-                val net = d.eaten - d.burned
-                Text(
-                    if (d.eaten < EnergyModel.MIN_LOGGED_KCAL) "—" else signed(net),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = when {
-                        d.eaten < EnergyModel.MIN_LOGGED_KCAL -> cs.onSurfaceVariant
-                        net <= 0 -> eatenColor
-                        else -> cs.error
-                    },
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ordered.forEach { d ->
                 Text(
@@ -122,8 +104,7 @@ fun EatenBurnedCard(days: List<DayEnergy>) {
             }
         }
         Text(
-            "Net is eaten minus burned. Below zero (green) means you burned more than you ate. " +
-                "\"—\" marks days with too little logged to count.",
+            "The green bar is what you ate inside what you burned: a gap above it is a deficit, and red means you ate more than you burned.",
             style = MaterialTheme.typography.labelSmall,
             color = cs.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp)

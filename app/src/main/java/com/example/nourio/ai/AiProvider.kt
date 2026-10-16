@@ -28,6 +28,11 @@ enum class Provider(
         null, true, emptyList(),
         "Free key. Nourio picks the best free model and switches keys and models automatically when one is busy."
     ),
+    GROQ(
+        "groq", "Groq", "Groq", "https://console.groq.com/keys", "Groq keys start with gsk_.",
+        "https://api.groq.com/openai/v1", true, emptyList(),
+        "Free key, no card needed, and very fast. Fewer models; for meal photos, pick one that accepts images."
+    ),
     CLAUDE(
         "claude", "Claude", "Anthropic", "https://console.anthropic.com/settings/keys", "Claude keys start with sk-ant-.",
         null, true, listOf("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"),
@@ -56,7 +61,7 @@ enum class Provider(
     MISTRAL(
         "mistral", "Mistral", "Mistral AI", "https://console.mistral.ai/api-keys", "Paste the key from your Mistral console.",
         "https://api.mistral.ai/v1", true, emptyList(),
-        "Paid API with a free tier. For meal photos, pick a Pixtral or other vision model."
+        "Free tier available (Mistral may then use your requests for training). For meal photos, pick a Pixtral or other vision model."
     ),
     QWEN(
         "qwen", "Qwen", "Alibaba Cloud", "https://bailian.console.alibabacloud.com/?apiKey=1", "DashScope keys start with sk-.",
@@ -66,7 +71,7 @@ enum class Provider(
     OPENROUTER(
         "openrouter", "OpenRouter", "OpenRouter", "https://openrouter.ai/keys", "OpenRouter keys start with sk-or-.",
         "https://openrouter.ai/api/v1", true, emptyList(),
-        "One key for hundreds of models from many companies. Your requests also pass through OpenRouter."
+        "One key for hundreds of models; those ending in :free cost nothing (about 50 requests a day). Requests pass through OpenRouter."
     );
 
     val isOpenAiCompatible get() = baseUrl != null

@@ -96,5 +96,6 @@ class LlmTest {
     fun deepSeekCannotTakePhotos() {
         assertFalse(Provider.DEEPSEEK.photos)
         assertTrue(Provider.entries.filter { it != Provider.GEMINI && it != Provider.CLAUDE }.all { it.baseUrl!!.startsWith("https://") })
+        assertEquals("https://api.groq.com/openai/v1", Provider.GROQ.baseUrl)
     }
 }

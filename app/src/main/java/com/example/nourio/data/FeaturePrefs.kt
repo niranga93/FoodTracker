@@ -16,7 +16,6 @@ class FeaturePrefs(context: Context) {
             Feature("home_sleep", "Last night", "Sleep length, stages, bedtime and your week of nights", "Home"),
             Feature("home_fast", "Fasting", "Time since your last meal and your eating window", "Home"),
             Feature("home_walk", "Move today", "Steps, activity burn and a walk to balance", "Home"),
-            Feature("home_exercise", "What to do today", "Exercise that balances what you've eaten", "Home"),
             Feature("home_week", "This week", "Day-by-day deficit and surplus", "Home"),
             Feature("home_weight", "Weight outlook", "Trend, 30-day outlook, target date", "Home"),
 
@@ -34,7 +33,8 @@ class FeaturePrefs(context: Context) {
             Feature("burn_outlook", "Where your weight is heading", "30-day outlook", "Burned"),
             Feature("burn_workouts", "Workouts", "Sessions that day", "Burned"),
 
-            Feature("diet", "Diet warnings", "Diets and allergies", "Smart")
+            Feature("diet", "Diet warnings", "Diets and allergies", "Smart"),
+            Feature("assistant_bubble", "Floating assistant", "The ✦ bubble that answers questions about your data", "Smart")
         )
     }
 }

@@ -120,6 +120,8 @@ class MainActivity : ComponentActivity() {
         com.example.nourio.ai.GeminiKeys.init(applicationContext)
         Onboarding.init(applicationContext)                                        // the setup guide on the first start
         com.example.nourio.achievements.Achievements.init(applicationContext)
+        // Channels exist from the first start, so Android lists Nourio's notification categories
+        com.example.nourio.reminders.NotificationChannels.ensure(applicationContext)
         if (savedInstanceState == null) {
             openPendingFrom(intent)
             handleShare(intent)
@@ -227,6 +229,7 @@ class MainActivity : ComponentActivity() {
         when (intent?.getStringExtra(com.example.nourio.reminders.Reminders.EXTRA_OPEN_TAB)) {
             "intake" -> { nav.open(Screen.Main); nav.setDay(0); nav.selectTab(NavTab.Intake) }
             "home" -> { nav.open(Screen.Main); nav.setDay(0); nav.selectTab(NavTab.Home) }
+            "burned" -> { nav.open(Screen.Main); nav.setDay(0); nav.selectTab(NavTab.Burned) }
             "fasting" -> nav.open(Screen.Page("fasting"))
         }
     }
@@ -505,6 +508,11 @@ fun MainScaffold(
                 NavTab.Burned -> BurnedScreen(db, dayOffset, onDayChange, inner)
                 NavTab.Profile -> ProfileHub(db, onOpenPage, inner)
             }
+        }
+        // Floats over every tab, kept clear of the status bar and the bottom navigation
+        val context = LocalContext.current
+        if (remember { com.example.nourio.data.FeaturePrefs(context).isOn("assistant_bubble") }) {
+            Box(Modifier.padding(inner)) { com.example.nourio.assistant.FloatingAssistant(db) }
         }
     }
 }

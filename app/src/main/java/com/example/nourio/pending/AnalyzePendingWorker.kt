@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.example.nourio.reminders.NotificationChannels
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.work.BackoffPolicy
@@ -57,7 +58,6 @@ class AnalyzePendingWorker(context: Context, params: WorkerParameters) : Corouti
 
     companion object {
         private const val WORK_NAME = "analyze-pending-meals"
-        private const val CHANNEL_ID = "meal_ready"
         private const val MAX_ATTEMPTS = 6
         const val EXTRA_PENDING_ID = "pending_id"
         private val PERMANENT_ERRORS = listOf("No food detected", "rejected the request", "Could not read the photo")
@@ -78,11 +78,6 @@ class AnalyzePendingWorker(context: Context, params: WorkerParameters) : Corouti
                 PackageManager.PERMISSION_GRANTED
             ) return   // the in-app card still shows it
 
-            val nm = context.getSystemService(NotificationManager::class.java)
-            nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Meals ready to review", NotificationManager.IMPORTANCE_DEFAULT)
-                    .apply { description = "When a photo taken offline has been analyzed" }
-            )
             val open = Intent(context, MainActivity::class.java)
                 .putExtra(EXTRA_PENDING_ID, p.id)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -90,8 +85,7 @@ class AnalyzePendingWorker(context: Context, params: WorkerParameters) : Corouti
                 context, p.id.toInt(), open,
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
-            val n = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
+            val n = NotificationChannels.builder(context, NotificationChannels.MEAL_READY)
                 .setContentTitle("Your ${p.label} is ready to review")
                 .setContentText(mealDescription)
                 .setContentIntent(pi)

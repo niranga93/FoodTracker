@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
+import com.example.nourio.reminders.NotificationChannels
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
@@ -54,7 +55,6 @@ class InsightWorker(context: Context, params: WorkerParameters) : CoroutineWorke
 
     companion object {
         private const val WORK_NAME = "daily_insight"
-        private const val CHANNEL_ID = "daily_tips"
         const val NOTIFICATION_ID = 7301
         const val EXTRA_OPEN_PAGE = "open_page"
 
@@ -92,10 +92,6 @@ class InsightWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             if (Build.VERSION.SDK_INT >= 33 &&
                 ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
             ) return
-            context.getSystemService(NotificationManager::class.java).createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Daily health tips", NotificationManager.IMPORTANCE_DEFAULT)
-                    .apply { description = "One tip a day, based on patterns in your food, sleep, activity and heart data" }
-            )
             val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             val open = PendingIntent.getActivity(
                 context, 0,
@@ -106,8 +102,7 @@ class InsightWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             val accept = PendingIntent.getBroadcast(context, 1, tipIntent(context, TipActionReceiver.ACCEPT, tip), flags)
             val later = PendingIntent.getBroadcast(context, 2, tipIntent(context, TipActionReceiver.DISMISS, tip), flags)
             val text = tip.body + (tip.change?.let { "\n\n${it.text}" } ?: "")
-            val n = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
+            val n = NotificationChannels.builder(context, NotificationChannels.TIPS)
                 .setContentTitle(tip.title)
                 .setContentText(tip.body)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(text))
@@ -116,8 +111,7 @@ class InsightWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                 // Tips can mention health details, so the lock screen only shows that one arrived
                 .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                 .setPublicVersion(
-                    NotificationCompat.Builder(context, CHANNEL_ID)
-                        .setSmallIcon(R.drawable.ic_launcher_foreground)
+                    NotificationChannels.builder(context, NotificationChannels.TIPS)
                         .setContentTitle("New health tip from Nourio")
                         .build()
                 )

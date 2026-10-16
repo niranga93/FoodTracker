@@ -147,10 +147,6 @@ fun HomeScreen(
         }
         if (features.isOn("home_fast")) item { com.example.nourio.fasting.FastingCard(db, dayOffset) }
         if (features.isOn("home_walk")) item { MoveCard(day, totals.kcal, body, dayOffset, goals.stepGoal) }
-        if (dayOffset == 0 && features.isOn("home_exercise")) item {
-            val bodyDays by rememberBodyData(0)
-            com.example.nourio.exercise.ExerciseCard(day, week, body, goals.stepGoal, bodyDays)
-        }
         if (features.isOn("home_week") && week.isNotEmpty()) item { WeekCard(week, goalKcal) }
         if (features.isOn("home_weight")) item { WeightOutlookCard(db, body) }
         // The detailed grades come last, after the dashboard

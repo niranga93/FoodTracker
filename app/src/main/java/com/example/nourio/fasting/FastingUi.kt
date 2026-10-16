@@ -46,6 +46,7 @@ import com.example.nourio.RelationshipCard
 import com.example.nourio.WidgetCard
 import com.example.nourio.dayTitle
 import com.example.nourio.data.MealDb
+import com.example.nourio.data.totals
 import com.example.nourio.insights.Analysis
 import com.example.nourio.insights.HistoryLoader
 import com.example.nourio.insights.InsightEngine
@@ -137,24 +138,158 @@ private fun FastRing(hours: Double, goal: Double, label: String, sub: String) {
     }
 }
 
-/** The fast going on now: since the last meal, with the stage and when the goal is reached. */
+private val KetoneColor = Color(0xFF9C8CFF)
+
 @Composable
-private fun FastNow(lastMeal: Long, now: Long, goal: Double) {
+private fun phaseColor(p: FuelPhase): Color = phaseColorRaw(p, MaterialTheme.colorScheme)
+
+/** "4:30 pm", or "2:00 am tomorrow" when it falls on another day than [now]. */
+private fun clockFrom(ms: Long, now: Long): String {
+    val zone = ZoneId.systemDefault()
+    val d = java.time.Instant.ofEpochMilli(ms).atZone(zone).toLocalDate()
+    val today = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+    return clock(ms) + when (d) { today -> ""; today.plusDays(1) -> " tomorrow"; today.minusDays(1) -> " yesterday"; else -> "" }
+}
+
+/**
+ * The fast going on now: hours since the last meal toward the goal, what the body is burning, the
+ * fuel mix, and when the meal runs out and stored fat takes over.
+ */
+@Composable
+private fun FastNow(lastMeal: Long, now: Long, goal: Double, fuel: FuelState?) {
     val cs = MaterialTheme.colorScheme
     val h = Fasting.hours(lastMeal, now).coerceAtLeast(0.0)
-    val stage = Fasting.stage(h)
     Row(verticalAlignment = Alignment.CenterVertically) {
         FastRing(h, goal, Fasting.duration(h), "of ${goal.toInt()} h")
         Spacer(Modifier.width(18.dp))
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Stat(stage.title, "where your body is", color = cs.secondary)
-            Stat(clock(lastMeal), "last meal")
+            if (fuel != null) Stat(fuel.phase.title, "what your body is using now", color = phaseColor(fuel.phase))
+            Stat(clock(lastMeal), "last meal" + (fuel?.lastMealKcal?.let { ", ${it.toLong()} kcal" } ?: ""))
             val goalAt = lastMeal + (goal * 3_600_000).toLong()
             if (h >= goal) Stat("Reached", "${goal.toInt()} h goal at ${clock(goalAt)}", color = cs.primary)
-            else Stat(clock(goalAt), "${goal.toInt()} h goal, in ${Fasting.duration(goal - h)}", color = cs.tertiary)
+            else Stat(clockFrom(goalAt, now), "${goal.toInt()} h goal, in ${Fasting.duration(goal - h)}", color = cs.tertiary)
         }
     }
-    Note(stage.text, if (h >= goal) cs.primary else cs.secondary)
+    if (fuel == null) {
+        Note(Fasting.stage(h).text, cs.secondary)
+        return
+    }
+
+    Spacer(Modifier.height(16.dp))
+    FuelMix(fuel)
+    Spacer(Modifier.height(16.dp))
+    FuelTimeline(fuel, now)
+
+    val left = { t: Long -> Fasting.duration((t - now) / 3_600_000.0) }
+    val detail = when (fuel.phase) {
+        FuelPhase.FED -> "About ${fuel.stillAbsorbingKcal.toLong()} kcal of your food is still being absorbed. It'll be used up " +
+            "by about ${clockFrom(fuel.absorbedAt, now)}, then your liver's stored glucose takes over."
+        FuelPhase.GLYCOGEN -> "Your meal was used up at about ${clockFrom(fuel.absorbedAt, now)}. Stored fat becomes your main fuel " +
+            "at about ${clockFrom(fuel.fatAt, now)}, in ${left(fuel.fatAt)}."
+        FuelPhase.FAT -> "Stored fat took over at about ${clockFrom(fuel.fatAt, now)}. Ketone production picks up around " +
+            "${clockFrom(fuel.ketosisAt, now)}, in ${left(fuel.ketosisAt)}."
+        FuelPhase.KETOSIS -> "Ketones have been rising since about ${clockFrom(fuel.ketosisAt, now)}. Fasts this long aren't for " +
+            "everyone: check with a doctor if you do them often."
+    }
+    Note("${fuel.phase.text}\n\n$detail", phaseColor(fuel.phase))
+    Muted(
+        "Estimates from your meals' size, carbs and fat. Exercise brings each step forward.",
+        Modifier.padding(top = 8.dp)
+    )
+}
+
+/** Where this moment's energy comes from, as one bar in three parts. */
+@Composable
+private fun FuelMix(f: FuelState) {
+    val cs = MaterialTheme.colorScheme
+    val parts = listOf(
+        Triple(f.fromFood, cs.secondary, "Food"),
+        Triple(f.fromGlycogen, cs.tertiary, "Stored glucose"),
+        Triple(f.fromFat, cs.primary, "Stored fat"),
+    )
+    Text("Fuel mix now", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+    Spacer(Modifier.height(6.dp))
+    Row(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(6.dp))) {
+        parts.filter { it.first > 0.005 }.forEach { (share, color, _) ->
+            Box(Modifier.weight(share.toFloat()).fillMaxSize().background(color))
+        }
+    }
+    Spacer(Modifier.height(6.dp))
+    // Whole percentages that always add up to 100: the largest share takes the rounding
+    val pct = parts.map { Math.round(it.first * 100).toInt() }.toMutableList()
+    pct[pct.indices.maxBy { parts[it].first }] += 100 - pct.sum()
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        parts.forEachIndexed { i, (_, color, label) ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+                Spacer(Modifier.width(4.dp))
+                Text("$label ${pct[i]}%", style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/** The fast from the last meal to ketosis: four coloured stretches, a marker for now, and the times. */
+@Composable
+private fun FuelTimeline(f: FuelState, now: Long) {
+    val cs = MaterialTheme.colorScheme
+    val end = f.ketosisAt + 2 * 3_600_000L
+    val span = (end - f.lastMeal).toFloat()
+    val stretches = listOf(
+        Triple(f.lastMeal, f.absorbedAt, cs.secondary),
+        Triple(f.absorbedAt, f.fatAt, cs.tertiary),
+        Triple(f.fatAt, f.ketosisAt, cs.primary),
+        Triple(f.ketosisAt, end, KetoneColor),
+    )
+    val marker = cs.onSurface
+    Text("Your fast, step by step", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+    Spacer(Modifier.height(8.dp))
+    Canvas(Modifier.fillMaxWidth().height(22.dp)) {
+        val y = size.height / 2
+        stretches.forEach { (a, b, c) ->
+            val x0 = (a - f.lastMeal) / span * size.width
+            val x1 = (b - f.lastMeal) / span * size.width
+            // Done stretches solid, the rest faint
+            val done = now >= b
+            drawLine(c.copy(alpha = if (done || now >= a) 1f else 0.35f), Offset(x0 + 2f, y), Offset(x1 - 2f, y),
+                strokeWidth = 8.dp.toPx(), cap = StrokeCap.Round)
+        }
+        val nx = ((now - f.lastMeal).coerceIn(0L, end - f.lastMeal)) / span * size.width
+        drawCircle(marker, 7.dp.toPx(), Offset(nx, y))
+        drawCircle(phaseColorRaw(f.phase, cs), 4.dp.toPx(), Offset(nx, y))
+    }
+    Spacer(Modifier.height(8.dp))
+    Row(Modifier.fillMaxWidth()) {
+        Milestone("Meal used up", f.absorbedAt, now, cs.secondary, Modifier.weight(1f))
+        Milestone("Fat takes over", f.fatAt, now, cs.primary, Modifier.weight(1f))
+        Milestone("Ketones rise", f.ketosisAt, now, KetoneColor, Modifier.weight(1f))
+    }
+}
+
+private fun phaseColorRaw(p: FuelPhase, cs: androidx.compose.material3.ColorScheme): Color = when (p) {
+    FuelPhase.FED -> cs.secondary
+    FuelPhase.GLYCOGEN -> cs.tertiary
+    FuelPhase.FAT -> cs.primary
+    FuelPhase.KETOSIS -> KetoneColor
+}
+
+/** The time on one line in colour; what happens, and on which day, underneath. */
+@Composable
+private fun Milestone(label: String, at: Long, now: Long, color: Color, modifier: Modifier) {
+    val day = clockFrom(at, now).removePrefix(clock(at)).trim()
+    Column(modifier) {
+        Text(clock(at), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = color, maxLines = 1)
+        Muted(if (day.isEmpty()) label else "$label, $day")
+    }
+}
+
+/** The last day and a half of meals, for the fuel estimate. */
+private suspend fun loadFuel(db: MealDb): List<MealFuel> = withContext(Dispatchers.IO) {
+    val now = System.currentTimeMillis()
+    db.between(now - 36 * 3_600_000L, now + 60_000L).map { m ->
+        val t = m.items.totals()
+        MealFuel(m.timestamp, t.kcal, t.carbs, t.fat)
+    }
 }
 
 /** Home: the fast going on now (today), or that day's fast and eating window (earlier days). */
@@ -165,7 +300,11 @@ fun FastingCard(db: MealDb, dayOffset: Int) {
     val goal = remember { FastingPrefs(context).goalH }
     val date = LocalDate.now().plusDays(dayOffset.toLong())
     var data by remember(dayOffset) { mutableStateOf<Pair<List<Long>, List<FastDay>>?>(null) }
-    LaunchedEffect(dayOffset) { data = loadDays(db, date, date) }
+    var meals by remember { mutableStateOf<List<MealFuel>>(emptyList()) }
+    LaunchedEffect(dayOffset) {
+        data = loadDays(db, date, date)
+        if (dayOffset == 0) meals = loadFuel(db)
+    }
     val now = rememberNow()
 
     WidgetCard(
@@ -181,7 +320,7 @@ fun FastingCard(db: MealDb, dayOffset: Int) {
                 Muted("Log your meals and Nourio tracks the time between them: your overnight fast and your eating window.")
                 return@WidgetCard
             }
-            FastNow(last, now, goal)
+            FastNow(last, now, goal, remember(meals, now) { Fuel.state(meals, now) })
         } else {
             Row {
                 Stat(day.fastH?.let { h1(it) } ?: "–", "overnight fast before", Modifier.weight(1f),
@@ -213,8 +352,10 @@ fun FastingPage(db: MealDb) {
     val today = LocalDate.now()
     var data by remember { mutableStateOf<Pair<List<Long>, List<FastDay>>?>(null) }
     var analysis by remember { mutableStateOf<Pair<List<com.example.nourio.insights.DayMetrics>, Analysis>?>(null) }
+    var meals by remember { mutableStateOf<List<MealFuel>>(emptyList()) }
     LaunchedEffect(Unit) {
         data = loadDays(db, today.minusDays(29), today)
+        meals = loadFuel(db)
         val history = HistoryLoader.load(context, db, 60)
         analysis = history to withContext(Dispatchers.Default) { InsightEngine.analyse(history, InsightGoals.current(context), today) }
     }
@@ -228,7 +369,7 @@ fun FastingPage(db: MealDb) {
             data == null -> Muted("Working it out…")
             last == null || Fasting.hours(last, now) > Fasting.MAX_FAST_H ->
                 Muted("No meal in the last 30 hours. Log your meals and your fasts appear here.")
-            else -> FastNow(last, now, goal)
+            else -> FastNow(last, now, goal, remember(meals, now) { Fuel.state(meals, now) })
         }
     }
 

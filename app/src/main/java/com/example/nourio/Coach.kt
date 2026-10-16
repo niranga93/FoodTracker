@@ -44,6 +44,11 @@ Rules:
 - The user's daily maximums are context only. Do not set new targets.
 """
 
+/** Withdraws the coach's consent; it asks again before its next request. Saved notes stay on the phone. */
+fun withdrawCoachConsent(context: Context) {
+    CoachPrefs(context).consented = false
+}
+
 private class CoachPrefs(context: Context) {
     private val p = context.getSharedPreferences("coach", Context.MODE_PRIVATE)
 

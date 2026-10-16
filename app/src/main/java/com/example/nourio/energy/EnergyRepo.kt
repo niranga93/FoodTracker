@@ -72,10 +72,30 @@ object EnergyRepo {
                 runCatching { HealthRepo.readDay(client, o, withDistance) }.onSuccess {
                     out[o] = it
                     synchronized(activityCache) { activityCache[key] = now to it }
+                    if (o == 0) saveToday(context, it)
                 }
             }
         }
         return out
+    }
+
+    // Health Connect can't be read in the background, so today's activity is kept from the last time
+    // the app read it, for the early-evening exercise suggestion.
+    private fun saveToday(context: Context, a: DayActivity) {
+        context.getSharedPreferences("activity_today", Context.MODE_PRIVATE).edit()
+            .putString("date", LocalDate.now().toString())
+            .putLong("steps", a.steps).putFloat("active", a.activeKcal.toFloat())
+            .putFloat("total", a.totalKcal.toFloat()).putFloat("km", a.distanceKm.toFloat())
+            .putLong("at", System.currentTimeMillis())
+            .apply()
+    }
+
+    /** Today's activity as last read in the app, and when; null if it hasn't been read today. */
+    fun savedToday(context: Context): Pair<DayActivity, Long>? {
+        val p = context.getSharedPreferences("activity_today", Context.MODE_PRIVATE)
+        if (p.getString("date", null) != LocalDate.now().toString()) return null
+        return DayActivity(p.getLong("steps", 0), p.getFloat("active", 0f).toDouble(), p.getFloat("total", 0f).toDouble(),
+            p.getFloat("km", 0f).toDouble()) to p.getLong("at", 0L)
     }
 
     fun build(body: Body, offset: Int, eaten: Double, act: DayActivity?): DayEnergy {

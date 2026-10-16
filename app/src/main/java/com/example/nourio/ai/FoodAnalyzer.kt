@@ -175,6 +175,32 @@ alcohol, honey. Use an empty list if none apply.
         }
     }
 
+    /** A conversation answered as JSON in [schema]. [turns] are (role, text) pairs, oldest first. */
+    suspend fun askJson(system: String, turns: List<Pair<String, String>>, schema: JSONObject): Result<String> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val contents = JSONArray()
+                turns.forEach { (role, text) ->
+                    contents.put(JSONObject().put("role", role).put("parts", JSONArray().put(JSONObject().put("text", text))))
+                }
+                val body = JSONObject()
+                    .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
+                    .put("contents", contents)
+                    .put(
+                        "generationConfig", JSONObject()
+                            .put("temperature", 0.2)
+                            .put("responseMimeType", "application/json")
+                            .put("responseSchema", schema)
+                    )
+                val partsOut = JSONObject(callWithFailover(body.toString()))
+                    .getJSONArray("candidates").getJSONObject(0)
+                    .getJSONObject("content").getJSONArray("parts")
+                buildString {
+                    for (i in 0 until partsOut.length()) append(partsOut.getJSONObject(i).optString("text", ""))
+                }.trim()
+            }
+        }
+
     /** Every request goes through [GeminiRouter]: one key until it fails, every model on it first. */
     private suspend fun callWithFailover(bodyJson: String): String = GeminiRouter.generate(bodyJson)
 

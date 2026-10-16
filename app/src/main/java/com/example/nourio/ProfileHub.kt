@@ -30,6 +30,7 @@ import com.example.nourio.plan.PlanStore
 import com.example.nourio.reminders.Reminder
 import com.example.nourio.reminders.ReminderPrefs
 import com.example.nourio.reminders.Reminders
+import com.example.nourio.reminders.NotificationChannels
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import java.util.Calendar
@@ -127,15 +128,29 @@ fun SettingsContent() {
                 }
                 if (i < Reminder.SWITCHES.lastIndex) HorizontalDivider(Modifier.padding(horizontal = 16.dp))
             }
-            if (Build.VERSION.SDK_INT >= 33 &&
-                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-            ) {
-                Text(
-                    "Notifications are off for Nourio, so reminders can't show. Turn them on in Settings > Apps > Nourio.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
-                )
+            HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+            // Covers both the permission and the phone's own switch for the app
+            val allowed = remember { NotificationChannels.allowed(context) }
+            var testResult by remember { mutableStateOf<String?>(null) }
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                if (!allowed) {
+                    Text(
+                        "Notifications are off for Nourio, so tips and reminders can't show.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error
+                    )
+                    TextButton(onClick = {
+                        context.startActivity(
+                            android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                        )
+                    }, contentPadding = PaddingValues(0.dp)) { Text("Turn on notifications") }
+                } else {
+                    TextButton(onClick = {
+                        testResult = if (NotificationChannels.sendTest(context)) "Sent. Check your notification shade."
+                            else "Couldn't send. Notifications may be blocked for Nourio in your phone's settings."
+                    }, contentPadding = PaddingValues(0.dp)) { Text("Send a test notification") }
+                    testResult?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
             }
         }
     }

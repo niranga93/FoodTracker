@@ -34,11 +34,12 @@ enum class Reminder(val key: String, val title: String, val hint: String, val re
     FAST_START("rem_fast", "Fasting window", "When your eating window closes and when your fast reaches its goal", 8101, false),
     FAST_DONE("rem_fast", "", "", 8102, false),     // shares the FAST_START switch
     WATER("rem_water", "Hydration", "At 3 pm if you've had less than half your water goal", 8103, true),
-    DINNER("rem_dinner", "Evening meal", "At 8 pm if nothing has been logged since 4 pm", 8104, true);
+    DINNER("rem_dinner", "Evening meal", "At 8 pm if nothing has been logged since 4 pm", 8104, true),
+    EXERCISE("rem_exercise", "Exercise suggestion", "At 6 pm, an activity that would balance today when you've eaten more than you've burned", 8105, true);
 
     companion object {
         /** One switch per row in Settings. */
-        val SWITCHES = listOf(FAST_START, WATER, DINNER)
+        val SWITCHES = listOf(FAST_START, WATER, DINNER, EXERCISE)
     }
 }
 
@@ -63,7 +64,6 @@ object Reminders {
     const val EXTRA_KIND = "reminder"
     const val EXTRA_OPEN_TAB = "open_tab"
 
-    private const val CHANNEL_ID = "reminders"
     private const val NOTIFICATION_ID = 7401
     private const val WATER_HOUR = 15
     private const val DINNER_HOUR = 20
@@ -137,6 +137,7 @@ object Reminders {
     private fun nextDue(context: Context, r: Reminder, now: Long): Long? = when (r) {
         Reminder.WATER -> daily(WATER_HOUR, now)
         Reminder.DINNER -> daily(DINNER_HOUR, now)
+        Reminder.EXERCISE -> daily(com.example.nourio.exercise.ExerciseNudge.HOUR, now)
         Reminder.FAST_START, Reminder.FAST_DONE -> fastDue(context, r, now)?.takeIf { it > now }
     }
 
@@ -165,7 +166,10 @@ object Reminders {
         }
     }
 
-    private data class Message(val instance: Long, val title: String, val text: String, val tab: String)
+    private data class Message(
+        val instance: Long, val title: String, val text: String, val tab: String,
+        val channel: String = NotificationChannels.REMINDERS,
+    )
 
     private fun check(context: Context, r: Reminder, now: Long): Message? {
         val zone = ZoneId.systemDefault()
@@ -187,6 +191,12 @@ object Reminders {
                     else "You're at $had of $goal ml. A glass or two now keeps you on track.",
                     "intake"
                 )
+            }
+            Reminder.EXERCISE -> {
+                val at = atHour(today, com.example.nourio.exercise.ExerciseNudge.HOUR, zone)
+                if (now !in at - 5 * 60_000L..at + 3 * HOUR_MS) return null
+                val n = com.example.nourio.exercise.ExerciseNudge.build(context) ?: return null
+                return Message(todayKey, n.title, n.text, "burned", NotificationChannels.EXERCISE)
             }
             Reminder.DINNER -> {
                 val dinnerAt = atHour(today, DINNER_HOUR, zone)
@@ -225,21 +235,14 @@ object Reminders {
     }
 
     private fun notify(context: Context, m: Message) {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) return
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Reminders", NotificationManager.IMPORTANCE_DEFAULT)
-                .apply { description = "Fasting window, water and evening meal reminders. Switch each one off in Settings." }
-        )
+        if (!NotificationChannels.allowed(context)) return
         val open = PendingIntent.getActivity(
-            context, 3,
+            context, if (m.channel == NotificationChannels.EXERCISE) 4 else 3,
             Intent(context, MainActivity::class.java).putExtra(EXTRA_OPEN_TAB, m.tab)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        val n = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+        val n = NotificationChannels.builder(context, m.channel)
             .setContentTitle(m.title)
             .setContentText(m.text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(m.text))
@@ -247,7 +250,8 @@ object Reminders {
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .build()
-        NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, n)
+        // The exercise suggestion has its own slot so it doesn't replace a reminder still on screen
+        NotificationManagerCompat.from(context).notify(if (m.channel == NotificationChannels.EXERCISE) NOTIFICATION_ID + 1 else NOTIFICATION_ID, n)
     }
 }
 

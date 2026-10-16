@@ -216,6 +216,17 @@ fun WorkoutsCard(day: DayBody, dayOffset: Int) {
 @Composable
 fun BodyPage(dayOffset: Int) {
     val openPage = LocalOpenPage.current
+    val context = LocalContext.current
+    // The full night (stages, bedtime, the week of nights) lives here; Home shows one line of it
+    val sleepGoal = remember { com.example.nourio.insights.InsightPrefs(context).sleepGoalH }
+    var sleep by remember(dayOffset) { mutableStateOf<com.example.nourio.health.SleepData?>(null) }
+    LaunchedEffect(dayOffset) {
+        sleep = runCatching { com.example.nourio.health.SleepRepo.load(context, dayOffset) }
+            .getOrDefault(com.example.nourio.health.SleepData(false, emptyMap(), emptyMap()))
+    }
+    sleep?.takeIf { it.nights[dayOffset] != null }?.let { s ->
+        LastNightCard(s, dayOffset, sleepGoal, Grading.sleepSubject(s.nights.getValue(dayOffset), s.shifts[dayOffset], sleepGoal))
+    }
     val days by rememberBodyData(dayOffset)
     val d = days
     if (d == null) {

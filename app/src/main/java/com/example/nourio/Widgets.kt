@@ -88,17 +88,6 @@ fun WidgetCard(
     }
 }
 
-/** Coloured stat tile for the Home hero card: Eaten, Burned, Balance. */
-@Composable
-fun HeroTile(label: String, value: String, container: Color, accent: Color, modifier: Modifier = Modifier) {
-    Column(
-        modifier.clip(RoundedCornerShape(16.dp)).background(container).padding(horizontal = 12.dp, vertical = 10.dp)
-    ) {
-        Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = accent)
-        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
-        Text("kcal", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
 
 // ---------------------------------------------------------------- Home
 

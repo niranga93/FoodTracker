@@ -292,9 +292,12 @@ private suspend fun loadFuel(db: MealDb): List<MealFuel> = withContext(Dispatche
     }
 }
 
-/** Home: the fast going on now (today), or that day's fast and eating window (earlier days). */
+/**
+ * Home's fasting line. Today: hours since the last meal, what the body is using, and the next step
+ * (fat taking over). Earlier days: that day's overnight fast and eating window. The full view is a tap away.
+ */
 @Composable
-fun FastingCard(db: MealDb, dayOffset: Int) {
+fun FastingBodyRow(db: MealDb, dayOffset: Int) {
     val context = LocalContext.current
     val openPage = LocalOpenPage.current
     val goal = remember { FastingPrefs(context).goalH }
@@ -306,38 +309,42 @@ fun FastingCard(db: MealDb, dayOffset: Int) {
         if (dayOffset == 0) meals = loadFuel(db)
     }
     val now = rememberNow()
+    val open = { openPage("fasting") }
+    val cs = MaterialTheme.colorScheme
 
-    WidgetCard(
-        if (dayOffset == 0) "Fasting" else "Fasting, ${dayTitle(dayOffset)}",
-        Modifier.clickable { openPage("fasting") },
-        trailing = { Muted("${ratio(goal)}  ›") }
-    ) {
-        val (times, days) = data ?: run { Muted("Working it out…"); return@WidgetCard }
-        val day = days.first()
-        val last = times.lastOrNull { it <= now }
-        if (dayOffset == 0) {
-            if (last == null || Fasting.hours(last, now) > Fasting.MAX_FAST_H) {
-                Muted("Log your meals and Nourio tracks the time between them: your overnight fast and your eating window.")
-                return@WidgetCard
-            }
-            FastNow(last, now, goal, remember(meals, now) { Fuel.state(meals, now) })
-        } else {
-            Row {
-                Stat(day.fastH?.let { h1(it) } ?: "–", "overnight fast before", Modifier.weight(1f),
-                    color = day.fastH?.let { if (it >= goal) MaterialTheme.colorScheme.primary else null })
-                Stat(day.windowH?.takeIf { day.meals >= 2 }?.let { h1(it) } ?: "–", "eating window", Modifier.weight(1f))
-            }
-        }
-        if (day.firstMeal != null && day.lastMeal != null && day.meals >= 2) {
-            Muted(
-                "Ate from ${clock(day.firstMeal)} to ${clock(day.lastMeal)}" +
-                    (day.fastH?.takeIf { dayOffset == 0 }?.let { "  ·  last night's fast ${h1(it)}" } ?: ""),
-                Modifier.padding(top = 10.dp)
-            )
-        } else if (dayOffset == 0 && day.fastH != null) {
-            Muted("Last night's fast: ${h1(day.fastH)}", Modifier.padding(top = 10.dp))
+    val (times, days) = data ?: run { com.example.nourio.BodyRow("⏳", "Fasting", "…", "Working it out", cs.secondary, onClick = open); return }
+    val day = days.first()
+    if (dayOffset != 0) {
+        com.example.nourio.BodyRow(
+            "⏳", "Fasting", day.fastH?.let { h1(it) } ?: "—",
+            "Overnight fast before ${ratio(goal)} goal" +
+                (day.windowH?.takeIf { day.meals >= 2 }?.let { "  ·  ate over ${h1(it)}" } ?: ""),
+            if ((day.fastH ?: 0.0) >= goal) cs.primary else cs.secondary,
+            progress = day.fastH?.let { (it / goal).toFloat().coerceIn(0f, 1f) }, onClick = open
+        )
+        return
+    }
+    val last = times.lastOrNull { it <= now }
+    if (last == null || Fasting.hours(last, now) > Fasting.MAX_FAST_H) {
+        com.example.nourio.BodyRow("⏳", "Fasting", "—", "Log your meals to track your fasts", cs.secondary, onClick = open)
+        return
+    }
+    val h = Fasting.hours(last, now)
+    val fuel = remember(meals, now) { Fuel.state(meals, now) }
+    val next = fuel?.let { f ->
+        when (f.phase) {
+            FuelPhase.FED -> "meal used up ${clockFrom(f.absorbedAt, now)}"
+            FuelPhase.GLYCOGEN -> "fat takes over ${clockFrom(f.fatAt, now)}"
+            FuelPhase.FAT -> "ketones rise ${clockFrom(f.ketosisAt, now)}"
+            FuelPhase.KETOSIS -> "in ketosis"
         }
     }
+    com.example.nourio.BodyRow(
+        "⏳", "Fasting · ${fuel?.phase?.short ?: "since last meal"}", Fasting.duration(h),
+        listOfNotNull(next, "goal ${goal.toInt()} h").joinToString("  ·  "),
+        fuel?.let { phaseColor(it.phase) } ?: cs.secondary,
+        progress = (h / goal).toFloat().coerceIn(0f, 1f), onClick = open
+    )
 }
 
 // ------------------------------------------------------------------ page

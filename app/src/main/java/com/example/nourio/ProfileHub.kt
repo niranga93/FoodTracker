@@ -106,10 +106,7 @@ fun SettingsContent() {
                 features.forEachIndexed { i, f ->
                     key(f.key) {
                         var on by remember { mutableStateOf(prefs.isOn(f.key)) }
-                        SwitchRow(f.title, f.hint, on) {
-                            on = it; prefs.set(f.key, it)
-                            if (f.key == "home_fast") Reminders.schedule(context)   // fasting reminders follow the card
-                        }
+                        SwitchRow(f.title, f.hint, on) { on = it; prefs.set(f.key, it) }
                     }
                     if (i < features.lastIndex) HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                 }

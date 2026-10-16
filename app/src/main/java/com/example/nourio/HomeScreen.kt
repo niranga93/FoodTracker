@@ -65,6 +65,17 @@ fun HomeScreen(
     val nf = remember { NumberFormat.getIntegerInstance() }
     val openPage = LocalOpenPage.current
     val water = remember { WaterStore(context) }
+    var waterMl by remember(dayOffset) { mutableIntStateOf(water.get(dayOffset)) }
+    // Latest weigh-in up to this day, and the change from about a week before it
+    val weightLine = remember(dayOffset) {
+        val zone = java.time.ZoneId.systemDefault()
+        val end = java.time.LocalDate.now(zone).plusDays(dayOffset.toLong() + 1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val all = WeightDb(context).all().filter { it.ts < end }
+        all.lastOrNull()?.let { last ->
+            val weekAgo = all.lastOrNull { it.ts <= last.ts - 6 * 86_400_000L }
+            WeightLine(last.kg, weekAgo?.let { last.kg - it.kg })
+        }
+    }
     val sleepGoal = remember { com.example.nourio.insights.InsightPrefs(context).sleepGoalH }
     var sleep by remember(dayOffset) { mutableStateOf<com.example.nourio.health.SleepData?>(null) }
     LaunchedEffect(dayOffset) {
@@ -103,14 +114,14 @@ fun HomeScreen(
             }
         }
 
-        // The day as a report card: overall grade, subject grades, then the teacher's note
+        // Graded as before; Home shows the grade as a badge and the weakest area as one focus line
         val report = Grading.report(
             DayInputs(
                 totals = totals,
                 budgetKcal = goalKcal,
                 goals = goals,
                 weightKg = profile.weightKg,
-                waterMl = water.get(dayOffset),
+                waterMl = waterMl,
                 waterGoalMl = water.goalMl,
                 steps = day?.steps,
                 isToday = dayOffset == 0,
@@ -120,14 +131,12 @@ fun HomeScreen(
                 sleepGoalH = sleepGoal
             )
         )
+        // 1. Today: energy, the key nutrients and one thing to focus on
         item {
-            ReportHeader(
-                report = report,
-                name = profile.name,
-                dayOffset = dayOffset,
-                eaten = totals.kcal,
-                budget = goalKcal,
-                burned = day?.burned,
+            TodayCard(
+                report = report, dayOffset = dayOffset, totals = totals, budget = goalKcal, burned = day?.burned,
+                goals = goals, weightKg = profile.weightKg, waterMl = waterMl, waterGoalMl = water.goalMl,
+                onAddWater = { waterMl = water.add(dayOffset, 250) },
                 onOpenBudget = { openPage("budget:$dayOffset") }
             ) {
                 if (body == null) {
@@ -140,16 +149,20 @@ fun HomeScreen(
         }
         // Photos taken offline: hidden when there are none
         if (dayOffset == 0) item { PendingMealsCard(onOpenPending) }
-        item { TeacherNoteCard(report, dayOffset == 0) }
-        // The night before sets up the day: right after the note, before the day's activity
-        if (features.isOn("home_sleep")) item {
-            LastNightCard(sleep, dayOffset, sleepGoal, report.subjects.firstOrNull { it.kind == SubjectKind.SLEEP })
+
+        // 2. The body side of the day, one line each; the full views are a tap away
+        val rows = buildList<@Composable () -> Unit> {
+            if (features.isOn("home_sleep")) add { SleepBodyRow(sleep, dayOffset, sleepGoal) { openPage("body:$dayOffset") } }
+            if (features.isOn("home_fast")) add { com.example.nourio.fasting.FastingBodyRow(db, dayOffset) }
+            if (features.isOn("home_walk")) add {
+                MoveBodyRow(day?.steps, day?.let { (it.burned - it.resting).coerceAtLeast(0.0) }, goals.stepGoal) { onOpenTab(NavTab.Burned) }
+            }
         }
-        if (features.isOn("home_fast")) item { com.example.nourio.fasting.FastingCard(db, dayOffset) }
-        if (features.isOn("home_walk")) item { MoveCard(day, totals.kcal, body, dayOffset, goals.stepGoal) }
-        if (features.isOn("home_week") && week.isNotEmpty()) item { WeekCard(week, goalKcal) }
-        if (features.isOn("home_weight")) item { WeightOutlookCard(db, body) }
-        // The detailed grades come last, after the dashboard
-        item { SubjectsCard(report) }
+        if (rows.isNotEmpty()) item { BodyTodayCard(rows) }
+
+        // 3. The week, with weight folded in
+        if (features.isOn("home_week") && week.isNotEmpty()) item {
+            WeekCard(week, goalKcal, weightLine) { openPage("weight") }
+        }
     }
 }

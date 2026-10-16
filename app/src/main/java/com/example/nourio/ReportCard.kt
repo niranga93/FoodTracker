@@ -223,6 +223,18 @@ object Grading {
         )
     }
 
+    /**
+     * One thing to work on, for Home: the weakest area and what to do about it. Calories come first when
+     * they're the problem; otherwise the area furthest behind.
+     */
+    fun focus(r: Report, isToday: Boolean): String {
+        if (r.grade == null) return "Log a meal and your day fills in here."
+        val worst = r.subjects.filter { it.score < 0.9 }
+            .minWithOrNull(compareBy<Subject> { if (it.kind == SubjectKind.CALORIES) -1.0 else 0.0 }.thenBy { it.score })
+            ?: return if (isToday) "Everything's on track so far. Keep it up." else "Every area was on track. Great day."
+        return "${worst.name}: ${worst.comment}"
+    }
+
     /** The teacher's note: verdict, best subject, and one thing to work on. */
     fun note(r: Report, isToday: Boolean): String {
         val grade = r.grade ?: return "Log a meal and your report card fills in."
@@ -257,172 +269,3 @@ fun gradeColor(grade: String?): Color {
     }
 }
 
-/** The top of the report card: date, overall grade and the day's calories. */
-@Composable
-fun ReportHeader(
-    report: Report,
-    name: String,
-    dayOffset: Int,
-    eaten: Double,
-    budget: Double,
-    burned: Double?,
-    onOpenBudget: () -> Unit,
-    extra: @Composable ColumnScope.() -> Unit
-) {
-    val cs = MaterialTheme.colorScheme
-    val nf = NumberFormat.getIntegerInstance()
-    val grade = report.grade
-    val color = gradeColor(grade)
-    AppCard(Modifier.fillMaxWidth()) {
-        // Coloured strip across the top, like the header band of a printed report
-        Box(Modifier.fillMaxWidth().height(6.dp).background(color))
-        Column(Modifier.padding(20.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        "DAILY REPORT CARD", style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp, color = cs.onSurfaceVariant
-                    )
-                    // The date is already in the header above, so the card is titled with the student
-                    Text(
-                        name.trim().substringBefore(' ').ifBlank { "Your day" },
-                        style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        if (dayOffset == 0) "Graded against the time of day" else "Final grades, ${dayTitle(dayOffset)}",
-                        style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        grade?.let { (if (dayOffset == 0) "So far: " else "") + Grading.verdict(it) } ?: "Not graded yet",
-                        style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color
-                    )
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
-                        Modifier.size(88.dp).clip(CircleShape).background(color.copy(alpha = 0.14f))
-                            .border(4.dp, color, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(grade ?: "—", fontSize = 44.sp, fontWeight = FontWeight.Black, color = color)
-                    }
-                    Text(
-                        report.score?.let { "${(it * 100).toInt()} / 100" } ?: "no score",
-                        style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 6.dp)
-                    )
-                }
-            }
-
-            if (budget > 0) {
-                Spacer(Modifier.height(18.dp))
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-                    Text("${nf.format(eaten.toLong())}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text(
-                        " of ${nf.format(budget.toLong())} kcal",
-                        style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant,
-                        modifier = Modifier.weight(1f).padding(bottom = 2.dp)
-                    )
-                    val left = budget - eaten
-                    Text(
-                        if (left >= 0) "${nf.format(left.toLong())} left" else "${nf.format((-left).toLong())} over",
-                        style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
-                        color = if (left >= 0) cs.primary else cs.error
-                    )
-                }
-                Spacer(Modifier.height(6.dp))
-                SlimBar((eaten / budget).toFloat(), eaten > budget)
-            }
-            Spacer(Modifier.height(14.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                HeroTile("Eaten", nf.format(eaten.toLong()), cs.primaryContainer, cs.primary, Modifier.weight(1f))
-                HeroTile("Burned", burned?.let { nf.format(it.toLong()) } ?: "—", cs.secondaryContainer, cs.secondary, Modifier.weight(1f))
-                HeroTile(
-                    "Balance",
-                    if (burned != null && eaten > 0) "%+,.0f".format(eaten - burned) else "—",
-                    cs.tertiaryContainer, cs.tertiary, Modifier.weight(1f)
-                )
-            }
-            if (budget > 0) {
-                TextButton(onClick = onOpenBudget, contentPadding = PaddingValues(0.dp)) { Text("How your budget is worked out") }
-            }
-            extra()
-        }
-    }
-}
-
-/** The subjects table: one row per area of the day with its grade, numbers and a comment. */
-@Composable
-fun SubjectsCard(report: Report) {
-    if (report.subjects.isEmpty()) return
-    val cs = MaterialTheme.colorScheme
-    AppCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(vertical = 14.dp)) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)) {
-                Text("SUBJECT", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.sp, color = cs.onSurfaceVariant, modifier = Modifier.weight(1f))
-                Text("GRADE", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.sp, color = cs.onSurfaceVariant)
-            }
-            report.subjects.forEachIndexed { i, s ->
-                if (i > 0) HorizontalDivider(Modifier.padding(horizontal = 20.dp))
-                SubjectRow(s)
-            }
-        }
-    }
-}
-
-@Composable
-private fun SubjectRow(s: Subject) {
-    val cs = MaterialTheme.colorScheme
-    val color = gradeColor(s.grade)
-    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(s.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                Text("  ${s.detail}", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
-            }
-            Spacer(Modifier.height(6.dp))
-            Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(cs.surfaceVariant)) {
-                Box(
-                    Modifier.fillMaxWidth(s.score.toFloat().coerceIn(0.03f, 1f)).fillMaxHeight()
-                        .clip(RoundedCornerShape(3.dp)).background(color)
-                )
-            }
-            Text(s.comment, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
-        }
-        Spacer(Modifier.width(14.dp))
-        Box(
-            Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = 0.16f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(s.grade, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = color)
-        }
-    }
-}
-
-/** The teacher's note at the bottom of the report. */
-@Composable
-fun TeacherNoteCard(report: Report, isToday: Boolean, onAddMeal: (() -> Unit)? = null) {
-    val cs = MaterialTheme.colorScheme
-    AppCard(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(20.dp)) {
-            Box(Modifier.width(4.dp).height(56.dp).clip(RoundedCornerShape(2.dp)).background(gradeColor(report.grade)))
-            Spacer(Modifier.width(14.dp))
-            Column {
-                Text(
-                    "TEACHER'S NOTE", style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp, color = cs.onSurfaceVariant
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(Grading.note(report, isToday), style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "Grades are a guide based on your goals, not medical advice.",
-                    style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant,
-                    textAlign = TextAlign.Start, modifier = Modifier.padding(top = 8.dp)
-                )
-                if (onAddMeal != null && report.grade == null) {
-                    TextButton(onClick = onAddMeal, contentPadding = PaddingValues(0.dp)) { Text("Log a meal") }
-                }
-            }
-        }
-    }
-}

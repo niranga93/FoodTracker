@@ -173,13 +173,13 @@ class StoreScreenshotsTest {
 
     @Test fun s1_home() {
         rule.setContent { App(NavTab.Home) }
-        waitFor("DAILY REPORT CARD"); waitFor("/ 100")
+        waitFor("TODAY"); waitFor("YOUR BODY")
         save("01-home")
     }
 
     @Test fun s2_dashboard() {
         rule.setContent { App(NavTab.Home) }
-        waitFor("/ 100")
+        waitFor("YOUR BODY")
         rule.onNode(hasScrollToIndexAction()).performScrollToIndex(3)
         waitFor("This week")
         save("02-dashboard")

@@ -88,11 +88,8 @@ object Reminders {
         }
     }
 
-    private fun enabled(context: Context, r: Reminder): Boolean {
-        if (!ReminderPrefs(context).isOn(r)) return false
-        // The fasting reminders follow the fasting card being shown at all
-        return r !in setOf(Reminder.FAST_START, Reminder.FAST_DONE) || FeaturePrefs(context).isOn("home_fast")
-    }
+    // Each reminder has its own switch; hiding a Home line doesn't silence it
+    private fun enabled(context: Context, r: Reminder): Boolean = ReminderPrefs(context).isOn(r)
 
     private fun alarmIntent(context: Context, r: Reminder): PendingIntent =
         PendingIntent.getBroadcast(

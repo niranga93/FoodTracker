@@ -1,6 +1,7 @@
 package com.example.nourio.nutrition
 
 import com.example.nourio.BuildConfig
+import okhttp3.CertificatePinner
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -11,9 +12,14 @@ import android.content.Context
 import android.util.Log
 
 object NutritionLookup {
+    private val pinner = CertificatePinner.Builder()
+        .add("api.nal.usda.gov", "sha256/Y9m3pBnn822fN8k+e4lM07Jm08e063k3N/218r24k08=")
+        .build()
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        .certificatePinner(pinner)
         .build()
 
     data class Per100g(

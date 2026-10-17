@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Certificate pinning for the food databases. A connection to these hosts is accepted only if its
+    certificate chain leads to one of the Let's Encrypt (ISRG) root keys below, so a certificate from
+    any other authority, even one the phone trusts, is refused.
+
+    The roots are pinned, not the servers' own certificates, which Let's Encrypt replaces every few
+    months. All four current ISRG roots are listed as backups. Checked 2026-10-17: api.nal.usda.gov,
+    world.openfoodfacts.org and search.openfoodfacts.org all chain YR2 -> Root YR -> ISRG Root X1.
+
+    The pins expire on purpose: if either service moves to another certificate authority, lookups
+    would fail until an app update. After the expiration date Android stops enforcing the pins and
+    falls back to normal certificate checks, so refresh the pins (and the date) in a release before then.
+    Hashes: SHA-256 of each root's public key (SPKI), from https://letsencrypt.org/certificates/
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">api.nal.usda.gov</domain>
+        <domain includeSubdomains="false">world.openfoodfacts.org</domain>
+        <domain includeSubdomains="false">search.openfoodfacts.org</domain>
+        <pin-set expiration="2027-10-17">
+            <!-- ISRG Root X1 (RSA), valid to 2035 -->
+            <pin digest="SHA-256">C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=</pin>
+            <!-- ISRG Root X2 (ECDSA), valid to 2040 -->
+            <pin digest="SHA-256">diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvVFZE8zmgzI=</pin>
+            <!-- ISRG Root YR (RSA, the newer hierarchy now in use), valid to 2045 -->
+            <pin digest="SHA-256">fk6IOKit1ild5647BH06ujSIq5XbCgqlbYl6ANhhi88=</pin>
+            <!-- ISRG Root YE (ECDSA, newer hierarchy), valid to 2045 -->
+            <pin digest="SHA-256">sCkq5UWXjg+7mKu9lMhhYF5bGLsy7VI/UNW3tccdR7w=</pin>
+        </pin-set>
+    </domain-config>
+</network-security-config>

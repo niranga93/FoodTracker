@@ -2,6 +2,7 @@ package com.example.nourio.nutrition
 
 import com.example.nourio.data.FoodItem
 import com.example.nourio.diet.AllergenDetector
+import okhttp3.CertificatePinner
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
@@ -27,9 +28,15 @@ object OpenFoodFacts {
     private const val FIELDS = "code,product_name,brands,nutriments,serving_quantity,allergens_tags," +
         "ingredients_analysis_tags,ingredients_text,additives_tags,nova_group,nutriscore_grade"
 
+    private val pinner = CertificatePinner.Builder()
+        .add("world.openfoodfacts.org", "sha256/Y9m3pBnn822fN8k+e4lM07Jm08e063k3N/218r24k08=")
+        .add("search.openfoodfacts.org", "sha256/Y9m3pBnn822fN8k+e4lM07Jm08e063k3N/218r24k08=")
+        .build()
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        .certificatePinner(pinner)
         .build()
 
     @Volatile private var lastSearchAt = 0L

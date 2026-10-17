@@ -74,6 +74,7 @@ fun PageScreen(id: String, db: MealDb, goalStore: GoalStore, onBack: () -> Unit)
                 }
                 "data" -> {
                     AiConsentCard()          // what may go to Gemini, one switch per feature
+                    HealthReportCard(db)     // the 30-day PDF for a doctor or dietitian
                     DataCard(db)
                     PrivacyCard()
                 }

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the health summary PDF, written to the cache just before it is shared -->
+<paths>
+    <cache-path name="reports" path="reports/" />
+</paths>

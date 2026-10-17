@@ -28,7 +28,7 @@ class NotificationsTest {
     fun everyChannelExistsAfterStartUp() {
         NotificationChannels.ensure(ctx)
         val ids = ctx.getSystemService(NotificationManager::class.java).notificationChannels.map { it.id }.toSet()
-        assertEquals(setOf("daily_tips", "reminders", "exercise", "meal_ready"), ids)
+        assertEquals(setOf("daily_tips", "reminders", "exercise", "nutrition", "meal_ready"), ids)
     }
 
     private fun profile() = ProfileStore(ctx).save(

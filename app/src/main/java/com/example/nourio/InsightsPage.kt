@@ -94,7 +94,7 @@ fun InsightsPage(db: MealDb) {
 
     OverviewCard(
         a, notify,
-        onNotify = { on -> notify = on; prefs.notificationsOn = on; if (on) ensurePermission() },
+        onNotify = { on -> notify = on; prefs.notificationsOn = on; com.example.nourio.reminders.Reminders.schedule(context); if (on) ensurePermission() },
         onPreview = if (open.isEmpty()) null else ({
             ensurePermission()
             InsightWorker.notify(context, open.first())

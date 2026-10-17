@@ -17,8 +17,12 @@ import androidx.core.content.edit
 import com.example.nourio.MainActivity
 import com.example.nourio.R
 import com.example.nourio.data.FeaturePrefs
+import com.example.nourio.data.GoalStore
 import com.example.nourio.data.MealDb
+import com.example.nourio.data.Totals
 import com.example.nourio.data.WaterStore
+import com.example.nourio.data.WeightDb
+import com.example.nourio.data.totals
 import com.example.nourio.fasting.Fasting
 import com.example.nourio.fasting.FastingPrefs
 import java.time.LocalDate
@@ -35,11 +39,16 @@ enum class Reminder(val key: String, val title: String, val hint: String, val re
     FAST_DONE("rem_fast", "", "", 8102, false),     // shares the FAST_START switch
     WATER("rem_water", "Hydration", "At 3 pm if you've had less than half your water goal", 8103, true),
     DINNER("rem_dinner", "Evening meal", "At 8 pm if nothing has been logged since 4 pm", 8104, true),
-    EXERCISE("rem_exercise", "Exercise suggestion", "At 6 pm, an activity that would balance today when you've eaten more than you've burned", 8105, true);
+    EXERCISE("rem_exercise", "Exercise suggestion", "At 6 pm, an activity that would balance today when you've eaten more than you've burned", 8105, true),
+    DINNER_PLAN("rem_plan", "Dinner planner", "At 5 pm, the one change for dinner that would round off today: protein, fibre, salt, sugar or calories", 8106, true),
+    WEEKLY("rem_week", "Weekly review", "Sunday at 6 pm, your week against your goals and one thing to focus on next", 8107, true),
+    WEIGH_IN("rem_weigh", "Weigh-in", "At 8 am, when it's been a week since your last weigh-in", 8108, true),
+    // Same switch as "Daily tips" on the Insights page
+    DAILY_TIP("notify", "Daily smart tip", "At 8 am, one tip from your past week: a pattern found in your data, or advice from how you ate", 8109, true);
 
     companion object {
         /** One switch per row in Settings. */
-        val SWITCHES = listOf(FAST_START, WATER, DINNER, EXERCISE)
+        val SWITCHES = listOf(DAILY_TIP, DINNER_PLAN, WEEKLY, WATER, DINNER, WEIGH_IN, EXERCISE, FAST_START)
     }
 }
 
@@ -48,8 +57,12 @@ class ReminderPrefs(context: Context) {
     // What was already sent, kept apart so the backed-up settings file doesn't change every day
     private val sent = context.getSharedPreferences("reminders_sent", Context.MODE_PRIVATE)
 
-    fun isOn(r: Reminder): Boolean = p.getBoolean(r.key, r.default)
-    fun set(r: Reminder, on: Boolean) = p.edit { putBoolean(r.key, on) }
+    // The daily tip keeps its switch where it always was, in the Insights settings
+    private val insights = context.getSharedPreferences("insights", Context.MODE_PRIVATE)
+    private fun store(r: Reminder) = if (r == Reminder.DAILY_TIP) insights else p
+
+    fun isOn(r: Reminder): Boolean = store(r).getBoolean(r.key, r.default)
+    fun set(r: Reminder, on: Boolean) = store(r).edit { putBoolean(r.key, on) }
 
     fun wasSent(r: Reminder, instance: Long) = sent.getLong(r.name, -1L) == instance
     fun markSent(r: Reminder, instance: Long) = sent.edit { putLong(r.name, instance) }
@@ -68,6 +81,11 @@ object Reminders {
     private const val WATER_HOUR = 15
     private const val DINNER_HOUR = 20
     private const val DINNER_SINCE_HOUR = 16
+    private const val DAY_START_HOUR = 4             // an eating day runs from 4 am to 4 am
+    private const val PLAN_HOUR = 17                 // early enough to shop or change what's cooked
+    private const val WEEK_HOUR = 18                 // Sunday evening, before the new week
+    private const val WEIGH_HOUR = 8                 // a morning reading, before breakfast
+    private const val TIP_HOUR = 8                   // the daily tip, to plan the day by
     private const val HOUR_MS = 3_600_000L
     private const val LATE_MS = 90 * 60_000L       // a delayed alarm still counts this long after it was due
 
@@ -109,6 +127,21 @@ object Reminders {
         return if (t > now) t else atHour(today.plusDays(1), hour, zone)
     }
 
+    /** The next Sunday at [hour], today if it's Sunday and still ahead. */
+    private fun sunday(hour: Int, now: Long): Long {
+        val zone = ZoneId.systemDefault()
+        var d = LocalDate.now(zone)
+        while (d.dayOfWeek != java.time.DayOfWeek.SUNDAY || atHour(d, hour, zone) <= now) d = d.plusDays(1)
+        return atHour(d, hour, zone)
+    }
+
+    /** Daily totals for each day from [from] (inclusive) to [to] (exclusive), as day starts. */
+    private fun totalsBetween(context: Context, from: Long, to: Long): Totals =
+        MealDb(context).between(from, to).flatMap { it.items }.totals()
+
+    /** Within a few hours after [at]: a delayed alarm still counts, a very late one doesn't. */
+    private fun around(now: Long, at: Long) = now in at - 5 * 60_000L..at + 3 * HOUR_MS
+
     /** Times of fast-breaking meals in the last two days, oldest first. */
     private fun recentEating(context: Context, now: Long): List<Long> {
         val db = MealDb(context)
@@ -119,10 +152,15 @@ object Reminders {
         }
     }
 
-    /** First fast-breaking meal today, if any. */
-    private fun firstToday(times: List<Long>): Long? {
-        val zone = ZoneId.systemDefault()
-        val start = LocalDate.now(zone).atStartOfDay(zone).toInstant().toEpochMilli()
+    /**
+     * When today's eating window opened: the first meal from 4 am on. Meals between midnight and 4 am
+     * belong to the evening before; counting a 1 am snack as the day's first meal closed the
+     * "window" at 9 am.
+     */
+    internal fun windowStart(times: List<Long>, now: Long, zone: ZoneId = ZoneId.systemDefault()): Long? {
+        val t = java.time.Instant.ofEpochMilli(now).atZone(zone)
+        val day = if (t.hour < DAY_START_HOUR) t.toLocalDate().minusDays(1) else t.toLocalDate()
+        val start = atHour(day, DAY_START_HOUR, zone)
         return times.firstOrNull { it >= start }
     }
 
@@ -135,6 +173,10 @@ object Reminders {
         Reminder.WATER -> daily(WATER_HOUR, now)
         Reminder.DINNER -> daily(DINNER_HOUR, now)
         Reminder.EXERCISE -> daily(com.example.nourio.exercise.ExerciseNudge.HOUR, now)
+        Reminder.DINNER_PLAN -> daily(PLAN_HOUR, now)
+        Reminder.WEIGH_IN -> daily(WEIGH_HOUR, now)
+        Reminder.WEEKLY -> sunday(WEEK_HOUR, now)
+        Reminder.DAILY_TIP -> daily(TIP_HOUR, now)
         Reminder.FAST_START, Reminder.FAST_DONE -> fastDue(context, r, now)?.takeIf { it > now }
     }
 
@@ -142,7 +184,7 @@ object Reminders {
         val goalH = FastingPrefs(context).goalH
         val times = recentEating(context, now)
         return when (r) {
-            Reminder.FAST_START -> firstToday(times)?.let { it + ((24 - goalH) * HOUR_MS).toLong() }
+            Reminder.FAST_START -> windowStart(times, now)?.let { it + ((24 - goalH) * HOUR_MS).toLong() }
             Reminder.FAST_DONE -> times.lastOrNull()?.let { it + (goalH * HOUR_MS).toLong() }
             else -> null
         }
@@ -153,19 +195,68 @@ object Reminders {
         try {
             if (!enabled(context, r)) return
             val now = System.currentTimeMillis()
+            if (r == Reminder.DAILY_TIP) { dailyTip(context, now); return }
             val message = check(context, r, now) ?: return
             val prefs = ReminderPrefs(context)
             if (prefs.wasSent(r, message.instance)) return
-            notify(context, message)
-            prefs.markSent(r, message.instance)
+            // Counted as sent only once it's really shown; while notifications are blocked it stays due
+            if (notify(context, message)) prefs.markSent(r, message.instance)
         } finally {
             scheduleNow(context)
         }
     }
 
+    /**
+     * 8 am: a pattern found by Insights when there is a new one (with Accept / Not now), otherwise
+     * advice from the past week's log ([DailyTip]). Once a day.
+     */
+    private fun dailyTip(context: Context, now: Long) {
+        val zone = ZoneId.systemDefault()
+        val today = LocalDate.now(zone)
+        if (!around(now, atHour(today, TIP_HOUR, zone))) return
+        val prefs = ReminderPrefs(context)
+        if (prefs.wasSent(Reminder.DAILY_TIP, today.toEpochDay())) return
+        if (!NotificationChannels.allowed(context)) return
+
+        val insight = com.example.nourio.insights.InsightPrefs(context)
+        val db = MealDb(context)
+        // Patterns first: worked out while the app was open (they include Health Connect data), or fresh from the log
+        // A background thread of the alarm's receiver, so waiting for the history here is fine
+        val tips = insight.savedTips(2 * 86_400_000L) ?: runCatching {
+            com.example.nourio.insights.InsightEngine.analyse(
+                kotlinx.coroutines.runBlocking { com.example.nourio.insights.HistoryLoader.load(context, db) },
+                com.example.nourio.insights.InsightGoals.current(context), today
+            ).tips
+        }.getOrDefault(emptyList())
+        val pattern = insight.open(tips).firstOrNull { now - insight.lastNotified(it.id) > 3 * 86_400_000L }
+        if (pattern != null) {
+            com.example.nourio.insights.InsightWorker.notify(context, pattern)
+            insight.markNotified(pattern.id)
+        } else {
+            // No pattern to report: advice from the 7 days before today
+            val water = WaterStore(context)
+            val days = (7 downTo 1).map { back ->
+                val d = today.minusDays(back.toLong())
+                val meals = db.between(atHour(d, 0, zone), atHour(d.plusDays(1), 0, zone))
+                val late = atHour(d, 20, zone)
+                TipDay(
+                    totals = meals.flatMap { it.items }.totals(),
+                    lateKcal = meals.filter { it.timestamp >= late }.flatMap { it.items }.totals().kcal,
+                    waterMl = water.get(-back),
+                )
+            }
+            val lastId = context.getSharedPreferences("reminders_sent", Context.MODE_PRIVATE).getString("tip_last", null)
+            val tip = DailyTip.pick(days, GoalStore(context).load(), water.goalMl, today.dayOfYear, lastId)
+            notify(context, Message(today.toEpochDay(), tip.title, tip.body, "home", NotificationChannels.TIPS, private = true))
+            context.getSharedPreferences("reminders_sent", Context.MODE_PRIVATE).edit { putString("tip_last", tip.id) }
+        }
+        prefs.markSent(Reminder.DAILY_TIP, today.toEpochDay())
+    }
+
     private data class Message(
         val instance: Long, val title: String, val text: String, val tab: String,
         val channel: String = NotificationChannels.REMINDERS,
+        val private: Boolean = false,       // mentions health details: the lock screen only says one arrived
     )
 
     private fun check(context: Context, r: Reminder, now: Long): Message? {
@@ -213,6 +304,28 @@ object Reminders {
                     "home"
                 )
             }
+            Reminder.DAILY_TIP -> return null             // sent by dailyTip(), which has its own buttons
+            Reminder.DINNER_PLAN -> {
+                if (!around(now, atHour(today, PLAN_HOUR, zone))) return null
+                val t = totalsBetween(context, atHour(today, 0, zone), now + 60_000)
+                val m = NutritionNudges.dinnerPlan(t, GoalStore(context).load()) ?: return null
+                return Message(todayKey, m.title, m.body, "home", NotificationChannels.NUTRITION)
+            }
+            Reminder.WEEKLY -> {
+                if (today.dayOfWeek != java.time.DayOfWeek.SUNDAY || !around(now, atHour(today, WEEK_HOUR, zone))) return null
+                // The 7 days before today: today is still under way
+                val days = (7 downTo 1).map { back ->
+                    val d = today.minusDays(back.toLong())
+                    totalsBetween(context, atHour(d, 0, zone), atHour(d.plusDays(1), 0, zone))
+                }
+                val m = NutritionNudges.weeklyReview(days, GoalStore(context).load()) ?: return null
+                return Message(todayKey, m.title, m.body, "home", NotificationChannels.NUTRITION)
+            }
+            Reminder.WEIGH_IN -> {
+                if (!around(now, atHour(today, WEIGH_HOUR, zone))) return null
+                val m = NutritionNudges.weighIn(WeightDb(context).all().map { it.ts }.sorted(), now) ?: return null
+                return Message(todayKey, m.title, m.body, "weight")
+            }
             Reminder.FAST_START, Reminder.FAST_DONE -> {
                 val due = fastDue(context, r, now) ?: return null
                 if (now < due - 5 * 60_000L || now > due + LATE_MS) return null
@@ -231,10 +344,10 @@ object Reminders {
         }
     }
 
-    private fun notify(context: Context, m: Message) {
-        if (!NotificationChannels.allowed(context)) return
+    private fun notify(context: Context, m: Message): Boolean {
+        if (!NotificationChannels.allowed(context)) return false
         val open = PendingIntent.getActivity(
-            context, if (m.channel == NotificationChannels.EXERCISE) 4 else 3,
+            context, slot(m) + 3,
             Intent(context, MainActivity::class.java).putExtra(EXTRA_OPEN_TAB, m.tab)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
@@ -246,9 +359,22 @@ object Reminders {
             .setContentIntent(open)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .apply {
+                if (m.private) setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setPublicVersion(
+                    NotificationChannels.builder(context, m.channel).setContentTitle("New health tip from Nourio").build()
+                )
+            }
             .build()
-        // The exercise suggestion has its own slot so it doesn't replace a reminder still on screen
-        NotificationManagerCompat.from(context).notify(if (m.channel == NotificationChannels.EXERCISE) NOTIFICATION_ID + 1 else NOTIFICATION_ID, n)
+        // Each kind has its own slot, so a check-in doesn't replace a reminder still on screen
+        NotificationManagerCompat.from(context).notify(NOTIFICATION_ID + slot(m), n)
+        return true
+    }
+
+    private fun slot(m: Message) = when (m.channel) {
+        NotificationChannels.EXERCISE -> 1
+        NotificationChannels.NUTRITION -> 2
+        NotificationChannels.TIPS -> 3
+        else -> 0
     }
 }
 

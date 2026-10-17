@@ -21,6 +21,7 @@ object NotificationChannels {
     const val REMINDERS = "reminders"
     const val MEAL_READY = "meal_ready"
     const val EXERCISE = "exercise"
+    const val NUTRITION = "nutrition"
 
     private const val GREEN = 0xFF0A7A50.toInt()
 
@@ -34,6 +35,8 @@ object NotificationChannels {
                     .apply { description = "Fasting window, water and evening meal reminders. Switch each one off in Settings." },
                 NotificationChannel(EXERCISE, "Exercise suggestions", NotificationManager.IMPORTANCE_DEFAULT)
                     .apply { description = "In the early evening, an activity that would balance what you've eaten today" },
+                NotificationChannel(NUTRITION, "Nutrition check-ins", NotificationManager.IMPORTANCE_DEFAULT)
+                    .apply { description = "The dinner planner and the weekly review, from what you've logged" },
                 NotificationChannel(MEAL_READY, "Meals ready to review", NotificationManager.IMPORTANCE_DEFAULT)
                     .apply { description = "When a photo taken offline has been analyzed" },
             )

@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
         PortionStore.init(applicationContext)
         BackupService.init(applicationContext)
         com.example.nourio.energy.EnergyRepo.init(applicationContext)
-        com.example.nourio.insights.InsightWorker.schedule(applicationContext)     // daily tip, keeps an existing schedule
+        com.example.nourio.insights.InsightWorker.schedule(applicationContext)     // removes the old 9 am job; the tip is now an 8 am reminder
         com.example.nourio.plan.Standards.init(applicationContext)                 // health guidelines: built in, or the last reviewed update
         com.example.nourio.plan.StandardsWorker.schedule(applicationContext)       // monthly check for updated guidelines
         com.example.nourio.ai.GeminiKeys.init(applicationContext)
@@ -236,6 +236,7 @@ class MainActivity : ComponentActivity() {
             "home" -> { nav.open(Screen.Main); nav.setDay(0); nav.selectTab(NavTab.Home) }
             "burned" -> { nav.open(Screen.Main); nav.setDay(0); nav.selectTab(NavTab.Burned) }
             "fasting" -> nav.open(Screen.Page("fasting"))
+            "weight" -> nav.open(Screen.Page("weight"))           // from the weigh-in reminder
         }
     }
 }

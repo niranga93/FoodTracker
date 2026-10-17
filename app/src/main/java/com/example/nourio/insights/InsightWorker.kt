@@ -15,17 +15,12 @@ import com.example.nourio.reminders.NotificationChannels
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.nourio.MainActivity
 import com.example.nourio.R
 import com.example.nourio.data.MealDb
-import java.time.Duration
 import java.time.LocalDate
-import java.time.LocalDateTime
-import java.util.concurrent.TimeUnit
 
 /** Once a day: analyse the history and send the top new tip as a notification with Accept / Not now. */
 class InsightWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
@@ -58,16 +53,13 @@ class InsightWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         const val NOTIFICATION_ID = 7301
         const val EXTRA_OPEN_PAGE = "open_page"
 
-        /** Every 24 hours, first run at the next 9:00. Keeps an existing schedule. */
+        /**
+         * The daily tip is now an 8 am alarm with the other reminders (Reminder.DAILY_TIP), which also
+         * sends advice from the past week when there's no pattern. This removes the old 9 am job, whose
+         * timing drifted, from phones that still have it.
+         */
         fun schedule(context: Context) {
-            val now = LocalDateTime.now()
-            var next = now.toLocalDate().atTime(9, 0)
-            if (!next.isAfter(now)) next = next.plusDays(1)
-            val request = PeriodicWorkRequestBuilder<InsightWorker>(24, TimeUnit.HOURS)
-                .setInitialDelay(Duration.between(now, next).toMinutes(), TimeUnit.MINUTES)
-                .build()
-            WorkManager.getInstance(context)
-                .enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+            WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
         }
 
         /** While the app is open: re-analyse at most every 6 hours and save the tips for the daily worker. */

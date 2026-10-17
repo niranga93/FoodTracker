@@ -79,6 +79,22 @@ object EnergyRepo {
         return out
     }
 
+    /**
+     * Active energy hour by hour since [fromMs], as (hour start, kcal), for the fasting fuel estimate.
+     * Empty when Health Connect is unavailable, switched off or not permitted.
+     */
+    suspend fun hourlyActive(context: Context, fromMs: Long, kcalPerStep: Double): List<Pair<Long, Double>> {
+        if (activityOverride != null) return emptyList()
+        if (HealthConnectClient.getSdkStatus(context) != HealthConnectClient.SDK_AVAILABLE) return emptyList()
+        if (!HealthPrefs(context).enabled) return emptyList()
+        val client = HealthConnectClient.getOrCreate(context)
+        val granted = runCatching { client.permissionController.getGrantedPermissions() }.getOrDefault(emptySet())
+        if (!granted.containsAll(HealthRepo.PERMISSIONS)) return emptyList()
+        return runCatching {
+            HealthRepo.readHourlyActive(client, java.time.Instant.ofEpochMilli(fromMs), java.time.Instant.now(), kcalPerStep)
+        }.getOrDefault(emptyList())
+    }
+
     // Health Connect can't be read in the background, so today's activity is kept from the last time
     // the app read it, for the early-evening exercise suggestion.
     private fun saveToday(context: Context, a: DayActivity) {

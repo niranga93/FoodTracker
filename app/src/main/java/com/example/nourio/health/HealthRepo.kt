@@ -6,8 +6,11 @@ import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
+import androidx.health.connect.client.request.AggregateGroupByDurationRequest
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -27,6 +30,24 @@ object HealthRepo {
 
     suspend fun hasPermissions(client: HealthConnectClient): Boolean =
         client.permissionController.getGrantedPermissions().containsAll(PERMISSIONS)
+
+    /**
+     * Active energy hour by hour between [from] and [to], as (hour start in ms, kcal). Where a device
+     * records steps but no active calories, the steps stand in at [kcalPerStep].
+     */
+    suspend fun readHourlyActive(client: HealthConnectClient, from: Instant, to: Instant, kcalPerStep: Double): List<Pair<Long, Double>> =
+        client.aggregateGroupByDuration(
+            AggregateGroupByDurationRequest(
+                metrics = setOf(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL, StepsRecord.COUNT_TOTAL),
+                timeRangeFilter = TimeRangeFilter.between(from, to),
+                timeRangeSlicer = Duration.ofHours(1)
+            )
+        ).mapNotNull { g ->
+            val active = g.result[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories ?: 0.0
+            val steps = g.result[StepsRecord.COUNT_TOTAL] ?: 0L
+            val kcal = if (active > 0) active else steps * kcalPerStep
+            if (kcal > 0) g.startTime.toEpochMilli() to kcal else null
+        }
 
     /** offset 0 = today, -1 = yesterday, ... */
     suspend fun readDay(client: HealthConnectClient, offset: Int, withDistance: Boolean = false): DayActivity {

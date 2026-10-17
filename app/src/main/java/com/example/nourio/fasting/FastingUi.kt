@@ -187,14 +187,20 @@ private fun FastNow(lastMeal: Long, now: Long, goal: Double, fuel: FuelState?) {
     val detail = when (fuel.phase) {
         FuelPhase.FED -> "About ${fuel.stillAbsorbingKcal.toLong()} kcal of your food is still being absorbed. It'll be used up " +
             "by about ${clockFrom(fuel.absorbedAt, now)}, then your liver's stored glucose takes over."
-        FuelPhase.GLYCOGEN -> "Your meal was used up at about ${clockFrom(fuel.absorbedAt, now)}. Stored fat becomes your main fuel " +
+        FuelPhase.GLYCOGEN -> "Your meal was used up at about ${clockFrom(fuel.absorbedAt, now)}. Your liver has about " +
+            "${fuel.glycogenG.toLong()} g of stored glucose left. Stored fat becomes your main fuel " +
             "at about ${clockFrom(fuel.fatAt, now)}, in ${left(fuel.fatAt)}."
         FuelPhase.FAT -> "Stored fat took over at about ${clockFrom(fuel.fatAt, now)}. Ketone production picks up around " +
             "${clockFrom(fuel.ketosisAt, now)}, in ${left(fuel.ketosisAt)}."
         FuelPhase.KETOSIS -> "Ketones have been rising since about ${clockFrom(fuel.ketosisAt, now)}. Fasts this long aren't for " +
             "everyone: check with a doctor if you do them often."
     }
-    Note("${fuel.phase.text}\n\n$detail", phaseColor(fuel.phase))
+    // Activity from Health Connect since the meal was used up moves the times earlier
+    val moved = fuel.activeKcal.takeIf { it >= 20 && fuel.phase != FuelPhase.FED }?.let {
+        "\n\nIncludes ${it.toLong()} kcal of activity from Health Connect since then, which used about " +
+            "${(it * Fuel.LIVER_G_PER_ACTIVE_KCAL).toLong().coerceAtLeast(1)} g of stored glucose."
+    } ?: ""
+    Note("${fuel.phase.text}\n\n$detail$moved", phaseColor(fuel.phase))
     Muted(
         "Estimates from your meals' size, carbs and fat. Exercise brings each step forward.",
         Modifier.padding(top = 8.dp)
@@ -286,12 +292,28 @@ private fun Milestone(label: String, at: Long, now: Long, color: Color, modifier
     }
 }
 
+/** Body weight for the glycogen estimate: a heavier body drains its liver store faster. 70 kg if not set. */
+@Composable
+private fun rememberWeight(): Double {
+    val context = LocalContext.current
+    return remember(LocalRefresh.current) { com.example.nourio.data.ProfileStore(context).load().weightKg.takeIf { it > 0 } ?: 70.0 }
+}
+
+/**
+ * Health Connect activity per hour since the first of [meals], for the glycogen estimate. Steps stand in
+ * where a device records no active calories (about 0.04 kcal a step at 70 kg). Empty when not connected.
+ */
+private suspend fun loadActivity(context: android.content.Context, meals: List<MealFuel>, weightKg: Double): List<Pair<Long, Double>> {
+    val from = meals.minOfOrNull { it.timestamp } ?: return emptyList()
+    return com.example.nourio.energy.EnergyRepo.hourlyActive(context, from, 0.04 * weightKg / 70.0)
+}
+
 /** The last day and a half of meals, for the fuel estimate. */
 private suspend fun loadFuel(db: MealDb): List<MealFuel> = withContext(Dispatchers.IO) {
     val now = System.currentTimeMillis()
     db.between(now - 36 * 3_600_000L, now + 60_000L).map { m ->
         val t = m.items.totals()
-        MealFuel(m.timestamp, t.kcal, t.carbs, t.fat)
+        MealFuel(m.timestamp, t.kcal, t.carbs, t.fat, t.fiber)
     }
 }
 
@@ -304,12 +326,14 @@ fun FastingBodyRow(db: MealDb, dayOffset: Int) {
     val context = LocalContext.current
     val openPage = LocalOpenPage.current
     val goal = remember { FastingPrefs(context).goalH }
+    val weightKg = rememberWeight()
     val date = LocalDate.now().plusDays(dayOffset.toLong())
     var data by remember(dayOffset) { mutableStateOf<Pair<List<Long>, List<FastDay>>?>(null) }
     var meals by remember { mutableStateOf<List<MealFuel>>(emptyList()) }
+    var activity by remember { mutableStateOf<List<Pair<Long, Double>>>(emptyList()) }   // Health Connect, per hour
     LaunchedEffect(dayOffset, LocalRefresh.current) {
         data = loadDays(db, date, date)
-        if (dayOffset == 0) meals = loadFuel(db)
+        if (dayOffset == 0) { meals = loadFuel(db); activity = loadActivity(context, meals, weightKg) }
     }
     val now = rememberNow()
     val open = { openPage("fasting") }
@@ -333,7 +357,7 @@ fun FastingBodyRow(db: MealDb, dayOffset: Int) {
         return
     }
     val h = Fasting.hours(last, now)
-    val fuel = remember(meals, now) { Fuel.state(meals, now) }
+    val fuel = remember(meals, activity, now) { Fuel.state(meals, now, weightKg, activity) }
     val next = fuel?.let { f ->
         when (f.phase) {
             FuelPhase.FED -> "meal used up ${clockFrom(f.absorbedAt, now)}"
@@ -359,13 +383,16 @@ fun FastingPage(db: MealDb) {
     val prefs = remember { FastingPrefs(context) }
     val reminders = remember { ReminderPrefs(context) }
     var goal by remember { mutableDoubleStateOf(prefs.goalH) }
+    val weightKg = rememberWeight()
     val today = LocalDate.now()
     var data by remember { mutableStateOf<Pair<List<Long>, List<FastDay>>?>(null) }
     var analysis by remember { mutableStateOf<Pair<List<com.example.nourio.insights.DayMetrics>, Analysis>?>(null) }
     var meals by remember { mutableStateOf<List<MealFuel>>(emptyList()) }
+    var activity by remember { mutableStateOf<List<Pair<Long, Double>>>(emptyList()) }   // Health Connect, per hour
     LaunchedEffect(Unit) {
         data = loadDays(db, today.minusDays(29), today)
         meals = loadFuel(db)
+        activity = loadActivity(context, meals, weightKg)
         val history = HistoryLoader.load(context, db, 60)
         analysis = history to withContext(Dispatchers.Default) { InsightEngine.analyse(history, InsightGoals.current(context), today) }
     }
@@ -379,7 +406,7 @@ fun FastingPage(db: MealDb) {
             data == null -> Muted("Working it out…")
             last == null || Fasting.hours(last, now) > Fasting.MAX_FAST_H ->
                 Muted("No meal in the last 30 hours. Log your meals and your fasts appear here.")
-            else -> FastNow(last, now, goal, remember(meals, now) { Fuel.state(meals, now) })
+            else -> FastNow(last, now, goal, remember(meals, activity, now) { Fuel.state(meals, now, weightKg, activity) })
         }
     }
 

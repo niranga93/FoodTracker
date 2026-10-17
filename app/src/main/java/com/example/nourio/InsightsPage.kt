@@ -146,7 +146,7 @@ fun InsightsPage(db: MealDb) {
     a.relationships.forEach { RelationshipCard(it) }
 
     if (a.trends.isNotEmpty()) {
-        Label("Last 2 weeks vs the 2 before")
+        Label("Last 2 weeks vs your usual")
         AppCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(vertical = 8.dp)) {
                 a.trends.forEachIndexed { i, t ->

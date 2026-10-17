@@ -85,6 +85,16 @@ class ExecutorTest {
     }
 
     @Test
+    fun unrelatedDataIsNotCalledALink() {
+        val r = kotlin.random.Random(3)
+        val sleep = (0L until 30).associate { back(it) to 5.0 + r.nextDouble() * 4 }
+        val kcal = (0L until 30).associate { back(it) to 1500.0 + r.nextDouble() * 1000 }
+        val plan = Plan.parse("""{"kind":"data","links":[{"id":"l1","x":"sleep_h","y":"kcal","next_day":false,"range":{"kind":"last_days","days":30}}],"answer":"There was {l1}."}""")
+        val text = Executor.answer(table(mapOf(AMetric.SLEEP to sleep, AMetric.KCAL to kcal)), plan).text
+        assertTrue(text, text.startsWith("There was no clear link (30 days)"))
+    }
+
+    @Test
     fun linkIsDescribedLocally() {
         val sleep = (0L until 20).associate { back(it) to 5.0 + (it % 5) }
         val kcal = sleep.mapValues { (_, h) -> 3000 - h * 150 }

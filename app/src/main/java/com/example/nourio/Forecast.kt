@@ -52,8 +52,9 @@ suspend fun loadForecast(context: Context, db: MealDb, body: Body): ForecastResu
 
     val cal = EnergyModel.calibrate(raw, points)
     val store = CalibrationStore(context)
-    if (cal != null) store.factor = cal.factor
+    if (cal != null) store.update(cal.factor)
     val f = store.factor
-    val pred = EnergyModel.predict(raw.take(14).map { it.copy(burned = it.burned * f) })
+    // Once weigh-ins have calibrated the burn, it's known to about 5% instead of 10%
+    val pred = EnergyModel.predict(raw.take(14).map { it.copy(burned = it.burned * f) }, if (cal != null) 0.05 else 0.10)
     return ForecastResult(pred, cal, f)
 }

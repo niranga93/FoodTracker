@@ -162,20 +162,24 @@ object Executor {
     }
 
     /** A plain-language reading of a link, worked out with the same statistics as the Insights page. */
+    /**
+     * Uses the same test as the Insights page (drift removed, habits allowed for, at least 14 days) so a
+     * chance pattern isn't presented as a link. One question is one test, so p < 0.05 applies directly.
+     */
     fun link(t: Table, l: Link): String? {
         val (from, to) = resolve(l.range, t.today, t.firstDate)
-        val xs = t.days[l.x].orEmpty(); val ys = t.days[l.y].orEmpty()
-        val pairs = xs.filterKeys { it in from..to }.mapNotNull { (d, x) ->
-            ys[if (l.nextDay) d.plusDays(1) else d]?.let { x to it }
+        val xs = t.days[l.x].orEmpty().filterKeys { it in from..to }
+        val test = InsightEngine.testLink(xs, t.days[l.y].orEmpty(), l.nextDay) ?: return null
+        val pairs = test.raw
+        val when_ = if (l.nextDay) "the next day" else "that day"
+        if (test.p >= 0.05 || abs(test.rho) < 0.2) {
+            return "no clear link (${pairs.size} days): ${l.y.label} $when_ didn't change in a reliable way with ${l.x.label}"
         }
-        if (pairs.size < 7) return null
-        val rho = InsightEngine.spearman(pairs.map { it.first }, pairs.map { it.second })
         val split = pairs.map { it.first }.sorted()[pairs.size / 2]
         val hi = pairs.filter { it.first >= split }.map { it.second }
         val lo = pairs.filter { it.first < split }.map { it.second }
         if (hi.isEmpty() || lo.isEmpty()) return null
-        val strength = when { abs(rho) >= 0.6 -> "a strong"; abs(rho) >= 0.4 -> "a clear"; abs(rho) >= 0.2 -> "a weak"; else -> "no real" }
-        val when_ = if (l.nextDay) "the next day" else "that day"
+        val strength = when { abs(test.rho) >= 0.5 -> "a strong"; abs(test.rho) >= 0.3 -> "a clear"; else -> "a modest" }
         return "$strength link (${pairs.size} days): when ${l.x.label} was ${fmt(l.x, split)} or more, " +
             "${l.y.label} $when_ averaged ${fmt(l.y, hi.average())}, against ${fmt(l.y, lo.average())} otherwise"
     }

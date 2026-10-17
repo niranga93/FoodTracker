@@ -58,9 +58,14 @@ object MealPipeline {
         val scale = factor ?: 1.0
         val grams = aiGrams * scale
         val term = o.optString("usda_search_term", name).ifBlank { name }
+        // The user's own correction is trusted as is. A database match must agree roughly with the AI's
+        // own calorie estimate; when it doesn't, it's probably the wrong food ("olive oil" matched to
+        // "olives"), so a closer search result is tried, then the AI's estimate.
+        val ai = aiEstimate(o)
         val n = NutritionLookup.correctionFor(name)
-            ?: runCatching { NutritionLookup.search(term) }.getOrNull()
-            ?: aiEstimate(o)
+            ?: runCatching { NutritionLookup.search(term) }.getOrNull()?.takeIf { plausible(it, ai) }
+            ?: runCatching { NutritionLookup.searchMany(term) }.getOrNull()?.firstOrNull { plausible(it, ai) }
+            ?: ai
 
         // Allergen / diet tags: what the model reported, plus keywords in the food names
         val tags = LinkedHashSet<String>()
@@ -97,6 +102,17 @@ object MealPipeline {
     }
 
     /** The model's own per-100 g values, used when no database match is found. */
+    /**
+     * A match is plausible when its calories per 100 g are within 2.5 times the AI's estimate either way,
+     * or within 80 kcal (low-calorie foods, where ratios swing wildly). Without an AI estimate, any match.
+     */
+    internal fun plausible(match: NutritionLookup.Per100g, ai: NutritionLookup.Per100g?): Boolean {
+        val expected = ai?.kcal?.takeIf { it > 0 } ?: return true
+        if (kotlin.math.abs(match.kcal - expected) <= 80) return true
+        val ratio = match.kcal / expected
+        return ratio in 0.4..2.5
+    }
+
     private fun aiEstimate(o: JSONObject): NutritionLookup.Per100g? {
         val kcal = o.optDouble("kcal_per_100g", Double.NaN)
         if (kcal.isNaN() || kcal < 0) return null

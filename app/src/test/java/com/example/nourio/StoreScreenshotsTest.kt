@@ -208,7 +208,7 @@ class StoreScreenshotsTest {
         rule.setContent { AppTheme { Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { PageScreen("insights", db, goals) {} } } }
         waitFor("Your health patterns")
         // Scroll so the trends heading is at the bottom and the link charts fill the screen
-        rule.onNode(hasText("LAST 2 WEEKS VS THE 2 BEFORE")).performScrollTo()
+        rule.onNode(hasText("LAST 2 WEEKS VS YOUR USUAL")).performScrollTo()
         save("06-insights-links")
     }
 

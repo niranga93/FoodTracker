@@ -1,5 +1,7 @@
 package com.example.nourio.energy
 
+import kotlin.math.sqrt
+
 enum class BurnSource(val label: String) {
     DEVICE_TOTAL("Health Connect total calories"),
     DEVICE_RESTING_PLUS_STEPS("Health Connect total + estimate from steps"),
@@ -135,21 +137,30 @@ object EnergyModel {
         return BurnEstimate(resting, BurnSource.BMR_ONLY, resting)
     }
 
-    /** Uses completed days only. Returns null when there isn't enough reliable data. */
-    fun predict(days: List<DayEnergy>): Prediction? {
+    /**
+     * Uses completed days only. Returns null when there isn't enough reliable data. The 30-day range is a
+     * 95% interval from two real sources of doubt: how much the daily balance varies (so the average is
+     * uncertain), and how far the burn estimate can be off ([burnUncertainty], smaller once weigh-ins
+     * have calibrated it).
+     */
+    fun predict(days: List<DayEnergy>, burnUncertainty: Double = 0.10): Prediction? {
         val usable = days.filter { it.logComplete }
         if (usable.size < 3) return null
-        val avg = usable.map { it.balance }.average()
+        val balances = usable.map { it.balance }
+        val avg = balances.average()
         val c30 = avg * 30.0 / KCAL_PER_KG
-        val a = c30 * 0.7
-        val b = c30 * 1.3
+        val sd = sqrt(balances.sumOf { (it - avg) * (it - avg) } / (balances.size - 1))
+        val avgBurned = usable.map { it.burned }.average()
+        // [burnUncertainty] is itself a 95% bound (the estimate is within 10% of the truth), so it adds as is
+        val perDay = sqrt((1.96 * sd / sqrt(balances.size.toDouble())).let { it * it } + (burnUncertainty * avgBurned).let { it * it })
+        val half = perDay * 30.0 / KCAL_PER_KG
         return Prediction(
             usedDays = usable.size,
             avgBalance = avg,
             weeklyKg = avg * 7.0 / KCAL_PER_KG,
             change30Kg = c30,
-            low30Kg = minOf(a, b),
-            high30Kg = maxOf(a, b),
+            low30Kg = c30 - half,
+            high30Kg = c30 + half,
             activityDays = usable.count { it.source != BurnSource.BMR_ONLY },
             largeDeficit = avg < -1000.0,
             avgEaten = usable.map { it.eaten }.average(),
@@ -169,6 +180,22 @@ object EnergyModel {
     }
 
     /**
+     * Theil-Sen slope: the median of the slopes between every pair of readings at least 3 days apart.
+     * A water spike after a salty dinner or a missed reading barely moves it, unlike a least-squares line.
+     */
+    internal fun theilSen(points: List<Pair<Double, Double>>): Double? {
+        val slopes = ArrayList<Double>()
+        for (i in points.indices) for (j in i + 1 until points.size) {
+            val dx = points[j].first - points[i].first
+            if (kotlin.math.abs(dx) >= 3.0) slopes += (points[j].second - points[i].second) / dx
+        }
+        if (slopes.isEmpty()) return null
+        slopes.sort()
+        val m = slopes.size / 2
+        return if (slopes.size % 2 == 1) slopes[m] else (slopes[m - 1] + slopes[m]) / 2
+    }
+
+    /**
      * rawDays: up to 28 completed days with the formula's (uncalibrated) burn.
      * weights: (days relative to now, negative = past, kg).
      * Compares actual weight change with calories eaten to infer real maintenance calories.
@@ -176,16 +203,15 @@ object EnergyModel {
     fun calibrate(rawDays: List<DayEnergy>, weights: List<Pair<Double, Double>>): Calibration? {
         val usable = rawDays.filter { it.logComplete }
         if (usable.size < 10) return null
+        // One reading per day, the first: a day weighed three times would otherwise count three times,
+        // and later readings carry that day's food and drink
         val w = weights.filter { it.first >= -28.0 }
+            .groupBy { kotlin.math.floor(it.first) }.values.map { day -> day.minBy { it.first } }
         if (w.size < 5) return null
         val span = w.maxOf { it.first } - w.minOf { it.first }
         if (span < 14.0) return null
 
-        val xm = w.map { it.first }.average()
-        val ym = w.map { it.second }.average()
-        val sxx = w.sumOf { (it.first - xm) * (it.first - xm) }
-        if (sxx == 0.0) return null
-        val slope = w.sumOf { (it.first - xm) * (it.second - ym) } / sxx   // kg per day
+        val slope = theilSen(w) ?: return null   // kg per day
 
         val avgEaten = usable.map { it.eaten }.average()
         val avgModelBurn = usable.map { it.burned }.average()

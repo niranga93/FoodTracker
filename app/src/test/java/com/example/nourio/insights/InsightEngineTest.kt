@@ -39,15 +39,21 @@ class InsightEngineTest {
     }
 
     @Test
-    fun noiseFindsNothing() {
-        val data = days(40) { _, r ->
-            mapOf(
-                Metric.SLEEP to 5 + r.nextDouble() * 4, Metric.KCAL to 1500 + r.nextDouble() * 1000,
-                Metric.SODIUM to 1500 + r.nextDouble() * 2000, Metric.STEPS to 3000 + r.nextDouble() * 9000,
-                Metric.SUGAR to 20 + r.nextDouble() * 60
-            )
+    fun noiseRarelyFindsAnything() {
+        // One random dataset can contain a chance link; what matters is how often. The engine keeps the
+        // false-discovery rate at 10%, so pure noise should show a link in roughly one dataset in ten.
+        val withLink = (1..100).count { seed ->
+            val r = Random(seed)
+            val data = (0 until 40).map { i ->
+                DayMetrics(today.minusDays((40 - i).toLong()), mapOf(
+                    Metric.SLEEP to 5 + r.nextDouble() * 4, Metric.KCAL to 1500 + r.nextDouble() * 1000,
+                    Metric.SODIUM to 1500 + r.nextDouble() * 2000, Metric.STEPS to 3000 + r.nextDouble() * 9000,
+                    Metric.SUGAR to 20 + r.nextDouble() * 60
+                ))
+            }
+            InsightEngine.analyse(data, goals, today).relationships.isNotEmpty()
         }
-        assertEquals(emptyList<Relationship>(), InsightEngine.analyse(data, goals, today).relationships)
+        assertTrue("noise showed a link in $withLink of 100 datasets", withLink <= 15)
     }
 
     @Test

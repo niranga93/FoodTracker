@@ -26,7 +26,7 @@ object NutritionLookup {
 
     // Try generic foods first, then fall back to everything (branded included)
     // Bump this number if you change the matching/scoring logic, so old cached matches are ignored
-    private const val CACHE_VERSION = 1
+    private const val CACHE_VERSION = 2          // 2: weak matches are now rejected, so earlier picks are redone
 
     private lateinit var cache: FoodCache
 
@@ -156,6 +156,14 @@ object NutritionLookup {
             .map { it.removeSuffix("s") }
             .toSet()
 
+    /** True when the description contains at least half the term's words (and at least one). */
+    internal fun relevant(term: String, desc: String): Boolean {
+        val t = words(term)
+        if (t.isEmpty()) return false
+        val matches = t.count { it in words(desc) }
+        return matches >= 1 && matches * 2 >= t.size
+    }
+
     private fun score(term: String, desc: String): Int {
         val t = words(term)
         val d = words(desc)
@@ -179,11 +187,13 @@ object NutritionLookup {
         val foods = JSONObject(raw).optJSONArray("foods")
         if (foods == null || foods.length() == 0) return null
 
-        // Pick the best-scoring candidate; earlier results win ties
+        // Pick the best-scoring candidate; earlier results win ties. A candidate must share at least half
+        // the words of the search term: the best of a poor list is still the wrong food.
         var food: JSONObject? = null
         var bestScore = Int.MIN_VALUE
         for (i in 0 until foods.length()) {
             val f = foods.getJSONObject(i)
+            if (!relevant(term, f.optString("description"))) continue
             val sc = score(term, f.optString("description")) * 10 - i
             if (sc > bestScore) { bestScore = sc; food = f }
         }

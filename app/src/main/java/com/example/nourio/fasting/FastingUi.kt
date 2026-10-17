@@ -459,7 +459,7 @@ fun FastingPage(db: MealDb) {
     links.forEach { RelationshipCard(it) }
     a.trends.filter { it.metric == Metric.FAST || it.metric == Metric.EATING_WINDOW }.forEach { t ->
         WidgetCard("Trend: ${t.metric.label.lowercase()}") {
-            Text("${h1(t.before)} → ${h1(t.recent)} a day, compared with two weeks before.", style = MaterialTheme.typography.bodyMedium)
+            Text("${h1(t.before)} → ${h1(t.recent)} a day, compared with the weeks before.", style = MaterialTheme.typography.bodyMedium)
         }
     }
 

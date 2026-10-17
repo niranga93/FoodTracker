@@ -43,7 +43,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -500,7 +499,7 @@ fun MainScaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             NavigationBar(containerColor = cardContainer(), tonalElevation = 0.dp) {
-                NavTab.values().forEach { t ->
+                NavTab.entries.forEach { t ->
                     NavigationBarItem(
                         selected = tab == t,
                         onClick = { onTab(t) },

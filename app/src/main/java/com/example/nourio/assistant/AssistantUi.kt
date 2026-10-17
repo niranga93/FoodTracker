@@ -40,7 +40,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.nourio.LocalOpenPage
-import com.example.nourio.ai.GeminiKeys
 import com.example.nourio.data.MealDb
 import kotlinx.coroutines.launch
 

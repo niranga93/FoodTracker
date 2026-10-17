@@ -2,6 +2,7 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)          // Room generates its database code at build time
 }
 
 val localProps = Properties().apply {
@@ -119,6 +120,9 @@ dependencies {
     implementation(libs.androidx.camera.view)
     implementation(libs.okhttp)
     implementation(libs.anthropic.java)          // Claude, through the official SDK
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
     implementation(libs.mlkit.barcode.scanning)
     implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.lifecycle.viewmodel.compose)

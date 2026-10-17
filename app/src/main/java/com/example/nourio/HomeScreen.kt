@@ -29,6 +29,9 @@ import com.example.nourio.energy.EnergyModel
 import com.example.nourio.energy.EnergyRepo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.withIndex
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.text.NumberFormat
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -67,10 +70,13 @@ fun HomeScreen(
     val water = remember { WaterStore(context) }
     var waterMl by remember(dayOffset) { mutableIntStateOf(water.get(dayOffset)) }
     // Latest weigh-in up to this day, and the change from about a week before it
-    val weightLine = remember(dayOffset) {
+    // Live weigh-ins: logging a weight on the Weigh-ins page updates the week card on return
+    val weightDb = remember { WeightDb(context) }
+    val weights by remember { weightDb.observeAll() }.collectAsStateWithLifecycle(initialValue = remember { weightDb.all() })
+    val weightLine = remember(dayOffset, weights) {
         val zone = java.time.ZoneId.systemDefault()
         val end = java.time.LocalDate.now(zone).plusDays(dayOffset.toLong() + 1).atStartOfDay(zone).toInstant().toEpochMilli()
-        val all = WeightDb(context).all().filter { it.ts < end }
+        val all = weights.filter { it.ts < end }
         all.lastOrNull()?.let { last ->
             val weekAgo = all.lastOrNull { it.ts <= last.ts - 6 * 86_400_000L }
             WeightLine(last.kg, weekAgo?.let { last.kg - it.kg })
@@ -83,7 +89,10 @@ fun HomeScreen(
             .getOrDefault(com.example.nourio.health.SleepData(false, emptyMap(), emptyMap()))
     }
 
-    LaunchedEffect(dayOffset) {
+    // Every change to the meal log gets a new number (an edit keeps the meal count the same), so the
+    // day's totals and the week recompute after any add, edit or delete
+    val mealVersion by remember { db.observeChanges().withIndex().map { it.index } }.collectAsStateWithLifecycle(initialValue = 0)
+    LaunchedEffect(dayOffset, mealVersion) {
         totals = withContext(Dispatchers.IO) { loadDay(db, dayOffset).flatMap { it.items }.totals() }
         if (body != null) {
             val offs = (0..6).map { dayOffset - it }

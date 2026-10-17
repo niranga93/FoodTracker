@@ -21,6 +21,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.State
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,6 +57,16 @@ private fun dayStart(offset: Int): Long = Calendar.getInstance().apply {
 }.timeInMillis
 
 fun loadDay(db: MealDb, offset: Int): List<Meal> = db.between(dayStart(offset), dayStart(offset + 1))
+
+/**
+ * A day's meals, newest first, kept up to date: adding, editing, deleting or re-logging a meal anywhere
+ * in the app updates every screen that shows that day, with no manual reload.
+ */
+@Composable
+fun rememberDayMeals(db: MealDb, offset: Int): State<List<Meal>> {
+    val flow = remember(offset) { db.observeBetween(dayStart(offset), dayStart(offset + 1)) }
+    return flow.collectAsStateWithLifecycle(initialValue = remember(offset) { loadDay(db, offset) })
+}
 
 /** Meals for each day offset, read with a single query. Days without meals map to an empty list. */
 fun loadDays(db: MealDb, offsets: List<Int>): Map<Int, List<Meal>> {

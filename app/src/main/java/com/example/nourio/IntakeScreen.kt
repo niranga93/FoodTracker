@@ -36,7 +36,8 @@ fun IntakeScreen(
     val context = LocalContext.current
     val features = remember { FeaturePrefs(context) }
     val aiOn = rememberAiAvailable()
-    var meals by remember(dayOffset) { mutableStateOf(loadDay(db, dayOffset)) }
+    // Live: deleting, editing or re-logging a meal updates the list by itself
+    val meals by rememberDayMeals(db, dayOffset)
     val goals = remember { goalStore.load() }
     val budget by rememberBudget(db, goalStore, dayOffset)
     var toDelete by remember { mutableStateOf<Meal?>(null) }
@@ -52,7 +53,6 @@ fun IntakeScreen(
             confirmButton = {
                 TextButton(onClick = {
                     db.delete(meal.id)
-                    meals = loadDay(db, dayOffset)
                     toDelete = null
                 }) { Text("Delete") }
             },
@@ -134,7 +134,7 @@ fun IntakeScreen(
                         db = db,
                         onEdit = { onEditMeal(meal.id) },
                         onDelete = { toDelete = meal },
-                        onLoggedToday = { if (dayOffset != 0) onDayChange(0) else meals = loadDay(db, 0) }
+                        onLoggedToday = { if (dayOffset != 0) onDayChange(0) }
                     )
                 }
             }

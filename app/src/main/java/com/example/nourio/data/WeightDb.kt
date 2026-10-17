@@ -1,54 +1,31 @@
 package com.example.nourio.data
 
-import androidx.core.database.sqlite.transaction
-import android.content.ContentValues
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
-import android.database.sqlite.SQLiteOpenHelper
+import com.example.nourio.data.room.WeightRow
+import com.example.nourio.data.room.WeightsDatabase
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 data class WeightEntry(val id: Long, val ts: Long, val kg: Double)
 
-class WeightDb(context: Context) : SQLiteOpenHelper(context, "weights.db", null, 1) {
+/** Weigh-ins. Backed by Room ([WeightsDatabase], the same weights.db file), with the methods the app always used. */
+class WeightDb(context: Context) {
+    private val dao = WeightsDatabase.get(context.applicationContext).weights()
 
-    override fun onCreate(db: SQLiteDatabase) {
-        db.execSQL(
-            "CREATE TABLE weights (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, kg REAL NOT NULL)"
-        )
-    }
+    private fun WeightRow.toEntry() = WeightEntry(id, ts, kg)
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+    fun add(ts: Long, kg: Double): Long = dao.insert(WeightRow(ts = ts, kg = kg))
 
-    fun add(ts: Long, kg: Double): Long {
-        val v = ContentValues().apply {
-            put("ts", ts)
-            put("kg", kg)
-        }
-        return writableDatabase.insert("weights", null, v)
-    }
-
-    fun delete(id: Long) {
-        writableDatabase.delete("weights", "id = ?", arrayOf(id.toString()))
-    }
+    fun delete(id: Long) = dao.delete(id)
 
     /** Oldest first. */
-    fun all(): List<WeightEntry> {
-        val out = mutableListOf<WeightEntry>()
-        readableDatabase.rawQuery("SELECT id, ts, kg FROM weights ORDER BY ts ASC", null).use { c ->
-            while (c.moveToNext()) out.add(WeightEntry(c.getLong(0), c.getLong(1), c.getDouble(2)))
-        }
-        return out
-    }
+    fun all(): List<WeightEntry> = dao.all().map { it.toEntry() }
 
-    fun replaceAll(entries: List<WeightEntry>) {
-        writableDatabase.transaction {
-            delete("weights", null, null)
-            for (e in entries) {
-                val v = ContentValues().apply {
-                    put("ts", e.ts)
-                    put("kg", e.kg)
-                }
-                insert("weights", null, v)
-            }
-        }
-    }
+    /** Oldest first, re-emitted whenever a weigh-in is added or removed. */
+    fun observeAll(): Flow<List<WeightEntry>> = dao.observeAll().map { rows -> rows.map { it.toEntry() } }
+
+    fun replaceAll(entries: List<WeightEntry>) = dao.replaceAll(entries.map { WeightRow(ts = it.ts, kg = it.kg) })
+
+    /** The database is shared and stays open for the app's lifetime; kept so existing callers compile. */
+    fun close() {}
 }

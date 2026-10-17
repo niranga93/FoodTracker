@@ -89,7 +89,7 @@ fun BurnedScreen(db: MealDb, dayOffset: Int, onDayChange: (Int) -> Unit, inner: 
     var hasDeviceData by remember(dayOffset) { mutableStateOf(false) }
     val bodyDays by rememberBodyData(dayOffset)
 
-    LaunchedEffect(dayOffset) {
+    LaunchedEffect(dayOffset, LocalRefresh.current) {
         if (body != null) {
             val offs = (0..6).map { dayOffset - it }
             val acts = EnergyRepo.activityFor(context, offs)

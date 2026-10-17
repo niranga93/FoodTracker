@@ -60,14 +60,15 @@ private val Violet = Color(0xFF9C8CFF)
 @Composable
 fun ProfileHub(db: MealDb, onOpenPage: (String) -> Unit, inner: PaddingValues) {
     val context = LocalContext.current
-    val profile = remember { ProfileStore(context).load() }
-    val goals = remember { GoalStore(context).load() }
+    val refresh = LocalRefresh.current            // re-read on pull-to-refresh, without clearing the page
+    val profile = remember(refresh) { ProfileStore(context).load() }
+    val goals = remember(refresh) { GoalStore(context).load() }
     val plan = remember { PlanStore(context) }
-    val diet = remember { DietStore(context).load() }
-    val weights = remember { WeightDb(context).all() }
+    val diet = remember(refresh) { DietStore(context).load() }
+    val weights = remember(refresh) { WeightDb(context).all() }
     val health = remember { HealthPrefs(context) }
-    val driveEmail = remember { BackupPrefs(context).email }
-    val keyCount = remember { GeminiKeys.count() }
+    val driveEmail = remember(refresh) { BackupPrefs(context).email }
+    val keyCount = remember(refresh) { GeminiKeys.count() }
     val budget by rememberBudget(db, GoalStore(context), 0)
 
     val nf = remember { NumberFormat.getIntegerInstance() }
@@ -82,7 +83,7 @@ fun ProfileHub(db: MealDb, onOpenPage: (String) -> Unit, inner: PaddingValues) {
         // Each number appears once on this page: weight in the journey (or Weigh-ins), the calorie goal
         // and BMI in the header, the streak as the header's third tile
         var streak by remember { mutableStateOf<com.example.nourio.achievements.Achievement?>(null) }
-        LaunchedEffect(Unit) {
+        LaunchedEffect(LocalRefresh.current) {
             streak = runCatching { com.example.nourio.achievements.Achievements.evaluate(context, db) }.getOrNull()
             // Celebrate badges earned since the last look
             streak?.newlyUnlocked?.takeIf { it.isNotEmpty() }?.let { b ->

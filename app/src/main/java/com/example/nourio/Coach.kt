@@ -135,7 +135,7 @@ fun CoachCard(db: MealDb, goalStore: GoalStore, dayOffset: Int) {
     var error by remember { mutableStateOf<String?>(null) }
     var askConsent by remember { mutableStateOf(false) }
     var hasMeals by remember(dayOffset) { mutableStateOf(false) }
-    LaunchedEffect(dayOffset) {
+    LaunchedEffect(dayOffset, LocalRefresh.current) {
         hasMeals = withContext(Dispatchers.IO) { loadDay(db, dayOffset).isNotEmpty() }
     }
     val timeFmt = remember { SimpleDateFormat("d MMM, h:mm a", Locale.getDefault()) }

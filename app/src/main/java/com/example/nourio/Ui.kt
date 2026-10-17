@@ -145,7 +145,13 @@ fun NavRow(title: String, subtitle: String, onClick: () -> Unit) {
     }
 }
 
-/** Pull down to refresh. Rebuilds its content, so every widget reloads its data. */
+/**
+ * Goes up by one on every pull-to-refresh. Data loaders use it as a key, so they reload in the
+ * background while the screen keeps showing what it had, instead of flashing empty starting values.
+ */
+val LocalRefresh = compositionLocalOf { 0 }
+
+/** Pull down to refresh: syncs Health Connect, then tells every widget to reload ([LocalRefresh]). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RefreshBox(topInset: Dp = 0.dp, content: @Composable () -> Unit) {
@@ -162,7 +168,7 @@ fun RefreshBox(topInset: Dp = 0.dp, content: @Composable () -> Unit) {
                 refreshing = true
                 EnergyRepo.clearCache()                 // forget saved Health Connect readings
                 HealthSync.syncNow(context)             // import and send, if switched on
-                tick++                                  // rebuild the screen below
+                tick++                                  // widgets reload, keeping what they show meanwhile
                 delay(500)
                 refreshing = false
             }
@@ -177,7 +183,9 @@ fun RefreshBox(topInset: Dp = 0.dp, content: @Composable () -> Unit) {
             )
         }
     ) {
-        key(tick) { content() }
+        // Not rebuilt: rebuilding reset every widget to its empty starting values ("0 eaten") until
+        // its data loaded again, and jumped the screen back to the top
+        CompositionLocalProvider(LocalRefresh provides tick) { content() }
     }
 }
 

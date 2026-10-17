@@ -30,7 +30,7 @@ import kotlin.math.abs
 fun rememberBudget(db: MealDb, goalStore: GoalStore, dayOffset: Int): State<Budget?> {
     val context = LocalContext.current
     val state = remember(dayOffset) { mutableStateOf<Budget?>(null) }
-    LaunchedEffect(dayOffset) { state.value = computeBudget(context, db, goalStore, dayOffset) }
+    LaunchedEffect(dayOffset, LocalRefresh.current) { state.value = computeBudget(context, db, goalStore, dayOffset) }
     return state
 }
 

@@ -31,7 +31,7 @@ private fun hm(minutes: Long) = "${minutes / 60}h ${minutes % 60}m"
 fun rememberBodyData(dayOffset: Int): State<List<DayBody>?> {
     val context = LocalContext.current
     val state = remember(dayOffset) { mutableStateOf<List<DayBody>?>(null) }
-    LaunchedEffect(dayOffset) {
+    LaunchedEffect(dayOffset, LocalRefresh.current) {
         val prefs = HealthPrefs(context)
         if (prefs.enabled && prefs.readExtras &&
             HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE
@@ -220,7 +220,7 @@ fun BodyPage(dayOffset: Int) {
     // The full night (stages, bedtime, the week of nights) lives here; Home shows one line of it
     val sleepGoal = remember { com.example.nourio.insights.InsightPrefs(context).sleepGoalH }
     var sleep by remember(dayOffset) { mutableStateOf<com.example.nourio.health.SleepData?>(null) }
-    LaunchedEffect(dayOffset) {
+    LaunchedEffect(dayOffset, LocalRefresh.current) {
         sleep = runCatching { com.example.nourio.health.SleepRepo.load(context, dayOffset) }
             .getOrDefault(com.example.nourio.health.SleepData(false, emptyMap(), emptyMap()))
     }

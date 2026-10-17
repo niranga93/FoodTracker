@@ -84,7 +84,7 @@ fun WeekCard(db: MealDb) {
     var stats by remember { mutableStateOf<WeekStats?>(null) }
     var loaded by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(LocalRefresh.current) {
         val offsets = (0 downTo -6).toList()
         val perDay = withContext(Dispatchers.IO) {
             val byDay = loadDays(db, offsets)

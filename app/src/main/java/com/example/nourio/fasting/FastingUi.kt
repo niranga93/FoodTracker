@@ -44,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.nourio.LocalOpenPage
+import com.example.nourio.LocalRefresh
 import com.example.nourio.RelationshipCard
 import com.example.nourio.WidgetCard
 import com.example.nourio.dayTitle
@@ -306,7 +307,7 @@ fun FastingBodyRow(db: MealDb, dayOffset: Int) {
     val date = LocalDate.now().plusDays(dayOffset.toLong())
     var data by remember(dayOffset) { mutableStateOf<Pair<List<Long>, List<FastDay>>?>(null) }
     var meals by remember { mutableStateOf<List<MealFuel>>(emptyList()) }
-    LaunchedEffect(dayOffset) {
+    LaunchedEffect(dayOffset, LocalRefresh.current) {
         data = loadDays(db, date, date)
         if (dayOffset == 0) meals = loadFuel(db)
     }

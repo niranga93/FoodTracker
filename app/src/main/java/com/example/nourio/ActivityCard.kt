@@ -71,7 +71,7 @@ private fun ActivityContent(dayOffset: Int) {
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
 
-    LaunchedEffect(connected, dayOffset) {
+    LaunchedEffect(connected, dayOffset, LocalRefresh.current) {
         if (connected) {
             failed = false
             data = null

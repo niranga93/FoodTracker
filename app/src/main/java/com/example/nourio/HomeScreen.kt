@@ -59,16 +59,18 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val features = remember { FeaturePrefs(context) }
-    val profile = remember { ProfileStore(context).load() }
-    val (body, _) = remember { EnergyRepo.body(profile) }
-    val goals = remember { goalStore.load() }
-    var totals by remember(dayOffset) { mutableStateOf(Totals()) }
+    val refresh = LocalRefresh.current
+    val profile = remember(refresh) { ProfileStore(context).load() }
+    val (body, _) = remember(profile) { EnergyRepo.body(profile) }
+    val goals = remember(refresh) { goalStore.load() }
+    // Starts from the day's real totals (a quick local read), so a new day never flashes "0 eaten"
+    var totals by remember(dayOffset) { mutableStateOf(loadDay(db, dayOffset).flatMap { it.items }.totals()) }
     val budget by rememberBudget(db, goalStore, dayOffset)
     var week by remember(dayOffset) { mutableStateOf<List<DayEnergy>>(emptyList()) }   // newest first
     val nf = remember { NumberFormat.getIntegerInstance() }
     val openPage = LocalOpenPage.current
     val water = remember { WaterStore(context) }
-    var waterMl by remember(dayOffset) { mutableIntStateOf(water.get(dayOffset)) }
+    var waterMl by remember(dayOffset, refresh) { mutableIntStateOf(water.get(dayOffset)) }
     // Latest weigh-in up to this day, and the change from about a week before it
     // Live weigh-ins: logging a weight on the Weigh-ins page updates the week card on return
     val weightDb = remember { WeightDb(context) }
@@ -84,7 +86,7 @@ fun HomeScreen(
     }
     val sleepGoal = remember { com.example.nourio.insights.InsightPrefs(context).sleepGoalH }
     var sleep by remember(dayOffset) { mutableStateOf<com.example.nourio.health.SleepData?>(null) }
-    LaunchedEffect(dayOffset) {
+    LaunchedEffect(dayOffset, LocalRefresh.current) {
         sleep = runCatching { com.example.nourio.health.SleepRepo.load(context, dayOffset) }
             .getOrDefault(com.example.nourio.health.SleepData(false, emptyMap(), emptyMap()))
     }
@@ -92,7 +94,7 @@ fun HomeScreen(
     // Every change to the meal log gets a new number (an edit keeps the meal count the same), so the
     // day's totals and the week recompute after any add, edit or delete
     val mealVersion by remember { db.observeChanges().withIndex().map { it.index } }.collectAsStateWithLifecycle(initialValue = 0)
-    LaunchedEffect(dayOffset, mealVersion) {
+    LaunchedEffect(dayOffset, mealVersion, LocalRefresh.current) {
         totals = withContext(Dispatchers.IO) { loadDay(db, dayOffset).flatMap { it.items }.totals() }
         if (body != null) {
             val offs = (0..6).map { dayOffset - it }

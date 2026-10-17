@@ -26,6 +26,9 @@ data class LlmRequest(
     val schema: JSONObject? = null,     // Gemini-style schema (OBJECT/STRING...) for a JSON reply; null = plain text
     val temperature: Double? = null,
     val maxTokens: Int = 4096,
+    // Lets the model look things up on the web: Google Search with Gemini, web search with Claude.
+    // Other services answer from what their model already knows. A JSON reply is then read from the text.
+    val webSearch: Boolean = false,
 )
 
 /** [role] is "user" or "model". [imageJpegBase64] attaches a photo to a user turn. */
@@ -46,11 +49,12 @@ object Llm {
         if (req.turns.any { it.imageJpegBase64 != null } && !provider.photos) {
             error("${provider.label} can't read photos. Describe the meal in words, or choose another AI service in Profile > Connections.")
         }
-        return when {
+        val out = when {
             provider == Provider.GEMINI -> gemini(req)
             provider == Provider.CLAUDE -> claude(req)
             else -> openAiCompatible(provider, req)
         }
+        return if (req.webSearch && req.schema != null) extractJson(out) else out
     }
 
     // ------------------------------------------------------------ Gemini (unchanged routing)
@@ -66,12 +70,14 @@ object Llm {
         }
         val config = JSONObject()
         req.temperature?.let { config.put("temperature", it) }
-        if (req.schema != null) config.put("responseMimeType", "application/json").put("responseSchema", req.schema)
+        // Search grounding can't be combined with a response schema, so a searching request gets JSON from the prompt
+        if (req.schema != null && !req.webSearch) config.put("responseMimeType", "application/json").put("responseSchema", req.schema)
         else config.put("maxOutputTokens", req.maxTokens)
         return JSONObject().apply {
             req.system?.let { put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", it)))) }
             put("contents", contents)
             put("generationConfig", config)
+            if (req.webSearch) put("tools", JSONArray().put(JSONObject().put("google_search", JSONObject())))
         }
     }
 
@@ -137,7 +143,10 @@ object Llm {
                 )
             )
         }
-        req.schema?.let { s ->
+        // Web search results carry citations, which structured output doesn't allow: JSON then comes from the prompt
+        if (req.webSearch) {
+            b.putAdditionalBodyProperty("tools", JsonValue.from(listOf(mapOf("type" to "web_search_20260209", "name" to "web_search", "max_uses" to 10))))
+        } else req.schema?.let { s ->
             @Suppress("UNCHECKED_CAST")
             val schema = toJava(toJsonSchema(s)) as Map<String, Any?>
             b.outputConfig(
@@ -156,6 +165,9 @@ object Llm {
         val msg = claudeClient(key).beta().messages().create(b.build())
         if (msg.stopReason().map { it.toString() }.orElse("") == "refusal") {
             error("Claude declined this request. Try rewording it.")
+        }
+        if (msg.stopReason().map { it.toString() }.orElse("") == "pause_turn") {
+            error("Claude's web search took too long. Try again later.")
         }
         return msg.content().joinToString("") { block -> block.text().map { it.text() }.orElse("") }.trim()
     }

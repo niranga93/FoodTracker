@@ -157,9 +157,9 @@ fun NutritionCard(t: Totals, g: Goals, sugarGoal: Double, fatGoal: Double) {
                 Donut(listOf(c to SrcCarbs, p to SrcProtein, f to SrcFat), t.kcal.f0(), "kcal", Modifier.size(112.dp))
                 Spacer(Modifier.width(20.dp))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SourceRow("Carbs", c / total, 45..65, SrcCarbs)
-                    SourceRow("Protein", p / total, 10..35, SrcProtein)
-                    SourceRow("Fat", f / total, 20..35, SrcFat)
+                    SourceRow("Carbs", c / total, com.example.nourio.plan.Standards.current.amdrCarbs, SrcCarbs)
+                    SourceRow("Protein", p / total, com.example.nourio.plan.Standards.current.amdrProtein, SrcProtein)
+                    SourceRow("Fat", f / total, com.example.nourio.plan.Standards.current.amdrFat, SrcFat)
                 }
             }
             HorizontalDivider(Modifier.padding(vertical = 14.dp))

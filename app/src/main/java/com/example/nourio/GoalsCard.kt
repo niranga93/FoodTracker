@@ -29,6 +29,7 @@ import com.example.nourio.data.MealDb
 import com.example.nourio.data.ProfileStore
 import com.example.nourio.plan.Guidelines
 import com.example.nourio.plan.PlanStore
+import com.example.nourio.plan.Standards
 import kotlinx.coroutines.delay
 import java.util.Calendar
 
@@ -93,7 +94,7 @@ fun GoalsCard(goalStore: GoalStore, db: MealDb, autoSave: Boolean = false) {
                 when (v.kcalSource) {
                     "your goal" -> "Based on ${v.kcal.f0()} kcal"
                     "maintenance" -> "Based on your maintenance of about ${v.kcal.f0()} kcal"
-                    else -> "Based on the 2,000 kcal reference"
+                    else -> "Based on the ${v.kcal.f0()} kcal reference"
                 }
             )
             v.proteinPerKg?.let { append(", ${profile.weightKg.f0()} kg and $goalWord (protein ${it.f1()} g/kg)") }
@@ -153,6 +154,8 @@ fun GoalsCard(goalStore: GoalStore, db: MealDb, autoSave: Boolean = false) {
                 GField("Fiber", "g", fiber, Modifier.weight(1f)) { fiber = it; saved = false }
             }
 
+            // Guideline changes found by the monthly AI check, each approved or rejected by the person
+            GuidelineUpdates(onLimitsChanged = { fillGuidelines() })
             OutlinedButton(onClick = { fillGuidelines() }, modifier = Modifier.fillMaxWidth()) {
                 Text("Use recommended values")
             }
@@ -160,18 +163,25 @@ fun GoalsCard(goalStore: GoalStore, db: MealDb, autoSave: Boolean = false) {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
             Expandable("How these are worked out") {
+                val s = Standards.current
+                fun n(x: Double) = if (x % 1.0 == 0.0) "%,d".format(x.toLong()) else "%.1f".format(x)
+                fun pct(x: Double) = "${(x * 100).toInt()}%"
                 Text(
                     "Replaces the limits below with values for you, from your calorie goal (or your maintenance " +
                         "calories when there's no goal), weight, age and whether you're losing, keeping or gaining weight.\n\n" +
-                        "• Protein: 0.8 g per kg, 1.0 g from age 65, 1.2 g while losing weight and 1.4 g while " +
+                        "• Protein: ${n(s.proteinPerKgAdult)} g per kg, ${n(s.proteinPerKgOlder)} g from age ${n(s.proteinOlderAge)}, " +
+                        "${n(s.proteinPerKgLosing)} g while losing weight and ${n(s.proteinPerKgGaining)} g while " +
                         "gaining. Above a BMI of 25, the weight at BMI 25 is used.\n" +
-                        "• Fat: up to 30% of calories. Saturated fat: up to 10%.\n" +
+                        "• Fat: up to ${pct(s.fatShare)} of calories. Saturated fat: up to ${pct(s.satFatShare)}.\n" +
                         "• Carbs: the calories left after protein and fat (40 to 60%).\n" +
-                        "• Added sugar: under 10% of calories, and at most 25 g a day (36 g for men). Natural " +
+                        "• Added sugar: under ${pct(s.addedSugarShare)} of calories, and at most ${n(s.addedSugarCapFemaleG)} g a day " +
+                        "(${n(s.addedSugarCapMaleG)} g for men). Natural " +
                         "sugar in whole fruit, vegetables and milk has no limit, so it isn't counted here.\n" +
-                        "• Fiber: 14 g per 1,000 kcal (21 to 38 g).\n" +
-                        "• Sodium: 2,300 mg. 1,500 mg is often advised for high blood pressure.\n\n" +
-                        "From WHO, US dietary guidelines and the American Heart Association. Edit freely. " +
+                        "• Fiber: ${n(s.fiberPer1000Kcal)} g per 1,000 kcal (${n(s.fiberMinG)} to ${n(s.fiberMaxG)} g).\n" +
+                        "• Sodium: ${n(s.sodiumMg)} mg. 1,500 mg is often advised for high blood pressure.\n\n" +
+                        "From WHO, US dietary guidelines and the American Heart Association. Once a month Nourio " +
+                        "asks your AI service whether any of these changed, and shows you each change to approve or " +
+                        "reject. Edit freely. " +
                         "General guidelines, not medical advice.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

@@ -14,7 +14,7 @@ data class Goals(
     val fiber: Double = 0.0,
     val steps: Double = 0.0              // daily step goal; 0 = the default 10,000
 ) {
-    val stepGoal: Long get() = if (steps > 0) steps.toLong() else 10_000L
+    val stepGoal: Long get() = if (steps > 0) steps.toLong() else com.example.nourio.plan.Standards.current.stepsDefault.toLong()
 }
 
 class GoalStore(context: Context) {

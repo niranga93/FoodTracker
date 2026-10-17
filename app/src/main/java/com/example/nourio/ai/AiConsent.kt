@@ -28,6 +28,11 @@ enum class AiUse(val key: String, val title: String, val sends: String, val purp
         "assistant", "Nourio Assistant",
         "Only your question and earlier questions in the chat. Your meals, weight and health data are never sent.",
         "The AI plans how to answer; your phone works out the answer from your data."
+    ),
+    STANDARDS(
+        "standards", "Guideline updates",
+        "Only the health guideline values the app uses, such as the 2,300 mg sodium limit, and where each comes from. Nothing about you.",
+        "Once a month the AI checks official sources for changed guidelines. You approve or reject each change."
     );
 
     companion object {

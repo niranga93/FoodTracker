@@ -264,7 +264,8 @@ object ReportPdf {
                     lx += body.measureText(label) + 30f
                 }
                 y += 12f
-                text("Reference ranges for adults (AMDR): protein 10–35%, carbohydrate 45–65%, fat 20–35% of energy.", muted)
+                val s = com.example.nourio.plan.Standards.current
+                text("Reference ranges for adults (AMDR): protein ${s.amdrProtein.first}–${s.amdrProtein.last}%, carbohydrate ${s.amdrCarbs.first}–${s.amdrCarbs.last}%, fat ${s.amdrFat.first}–${s.amdrFat.last}% of energy.", muted)
             }
         }
 

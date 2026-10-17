@@ -19,7 +19,7 @@ class InsightPrefs(context: Context) {
 
     // Hours. Only used by tips and the Insights page.
     var sleepGoalH: Double
-        get() = p.getFloat("sleepGoal", 7f).toDouble()
+        get() = p.getFloat("sleepGoal", com.example.nourio.plan.Standards.current.sleepGoalH.toFloat()).toDouble()
         set(v) = p.edit { putFloat("sleepGoal", v.toFloat()) }
 
     /** "id|epoch ms|text" for accepted tips, newest last. */

@@ -117,6 +117,8 @@ class MainActivity : ComponentActivity() {
         BackupService.init(applicationContext)
         com.example.nourio.energy.EnergyRepo.init(applicationContext)
         com.example.nourio.insights.InsightWorker.schedule(applicationContext)     // daily tip, keeps an existing schedule
+        com.example.nourio.plan.Standards.init(applicationContext)                 // health guidelines: built in, or the last reviewed update
+        com.example.nourio.plan.StandardsWorker.schedule(applicationContext)       // monthly check for updated guidelines
         com.example.nourio.ai.GeminiKeys.init(applicationContext)
         com.example.nourio.ai.AiSettings.init(applicationContext)     // which AI service, model and key
         com.example.nourio.ai.AiConsent.init(applicationContext)      // nothing goes to Gemini without it
@@ -224,8 +226,9 @@ class MainActivity : ComponentActivity() {
         val id = intent?.getLongExtra(AnalyzePendingWorker.EXTRA_PENDING_ID, -1L) ?: -1L
         if (id > 0) nav.open(Screen.ReviewPending(id))
         // From the daily tip notification. Only this page is allowed, since other apps can start this activity.
-        if (intent?.getStringExtra(com.example.nourio.insights.InsightWorker.EXTRA_OPEN_PAGE) == "insights") {
-            nav.open(Screen.Page("insights"))
+        when (intent?.getStringExtra(com.example.nourio.insights.InsightWorker.EXTRA_OPEN_PAGE)) {
+            "insights" -> nav.open(Screen.Page("insights"))
+            "goals" -> nav.open(Screen.Page("goals"))         // from "Health guidelines updated"
         }
         // From a reminder. Again only a fixed set of places.
         when (intent?.getStringExtra(com.example.nourio.reminders.Reminders.EXTRA_OPEN_TAB)) {

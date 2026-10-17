@@ -7,7 +7,7 @@ import kotlin.math.roundToInt
 /**
  * Recommended daily limits for one person, from their calorie goal, body and weight direction.
  *
- * Sources for each value:
+ * Sources for each value (the built-in values; see [Standards] for how they are kept current):
  * - Calories: the calorie goal (target-weight plan or typed goal), otherwise maintenance, otherwise the
  *   2,000 kcal reference used on food labels.
  * - Protein (a minimum): 0.8 g/kg, the RDA for adults (US/Canada Dietary Reference Intakes);
@@ -27,14 +27,8 @@ import kotlin.math.roundToInt
  *   intake). 1,500 mg is advised for high blood pressure, which is left to the person and their doctor.
  */
 object Guidelines {
-    const val REFERENCE_KCAL = 2000.0
-    const val FAT_SHARE = 0.30
-    const val SAT_FAT_SHARE = 0.10
-    const val ADDED_SUGAR_SHARE = 0.10
-    const val ADDED_SUGAR_CAP_MALE = 36.0
-    const val ADDED_SUGAR_CAP_OTHER = 25.0
-    const val FIBER_PER_1000_KCAL = 14.0
-    const val SODIUM_MG = 2300.0
+    // The numbers come from [Standards]: built in, and updated monthly from the reviewed guidelines file
+    private val s get() = Standards.current
     private const val TREND_KCAL = 150.0      // a calorie goal this far from maintenance means losing or gaining
 
     enum class Direction { LOSE, KEEP, GAIN }
@@ -74,9 +68,9 @@ object Guidelines {
     }
 
     fun proteinPerKg(p: Person): Double = when (p.direction) {
-        Direction.LOSE -> 1.2
-        Direction.GAIN -> 1.4
-        Direction.KEEP -> if (p.age >= 65) 1.0 else 0.8
+        Direction.LOSE -> s.proteinPerKgLosing
+        Direction.GAIN -> s.proteinPerKgGaining
+        Direction.KEEP -> if (p.age >= s.proteinOlderAge) s.proteinPerKgOlder else s.proteinPerKgAdult
     }
 
     /** Body weight for protein: actual weight, or the weight at BMI 25 when above it. */
@@ -90,15 +84,15 @@ object Guidelines {
         val (kcal, source) = when {
             kcalGoal > 0 -> kcalGoal to "your goal"
             maintenance > 0 -> maintenance to "maintenance"
-            else -> REFERENCE_KCAL to "reference"
+            else -> s.referenceKcal to "reference"
         }
 
         val perKg = if (p.weightKg > 0) proteinPerKg(p) else null
         val rawProtein = perKg?.let { it * proteinWeight(p) } ?: (kcal * 0.15 / 4)
-        val protein = rawProtein.coerceIn(kcal * 0.10 / 4, kcal * 0.35 / 4)
+        val protein = rawProtein.coerceIn(kcal * s.amdrProtein.first / 400, kcal * s.amdrProtein.last / 400)
 
-        val fat = kcal * FAT_SHARE / 9
-        val carbShare = (1.0 - protein * 4 / kcal - FAT_SHARE).coerceIn(0.40, 0.60)
+        val fat = kcal * s.fatShare / 9
+        val carbShare = (1.0 - protein * 4 / kcal - s.fatShare).coerceIn(0.40, 0.60)
 
         return Values(
             kcal = roundTo(kcal, 10.0),
@@ -106,11 +100,11 @@ object Guidelines {
             protein = roundTo(protein, 5.0),
             proteinPerKg = perKg,
             fat = roundTo(fat, 5.0),
-            satFat = roundTo(kcal * SAT_FAT_SHARE / 9, 1.0),
+            satFat = roundTo(kcal * s.satFatShare / 9, 1.0),
             carbs = roundTo(kcal * carbShare / 4, 5.0),
-            addedSugar = roundTo(min(kcal * ADDED_SUGAR_SHARE / 4, if (p.sex == "Male") ADDED_SUGAR_CAP_MALE else ADDED_SUGAR_CAP_OTHER), 1.0),
-            fiber = roundTo(max(21.0, min(38.0, kcal / 1000 * FIBER_PER_1000_KCAL)), 1.0),
-            sodiumMg = SODIUM_MG,
+            addedSugar = roundTo(min(kcal * s.addedSugarShare / 4, if (p.sex == "Male") s.addedSugarCapMaleG else s.addedSugarCapFemaleG), 1.0),
+            fiber = roundTo(max(s.fiberMinG, min(s.fiberMaxG, kcal / 1000 * s.fiberPer1000Kcal)), 1.0),
+            sodiumMg = s.sodiumMg,
         )
     }
 

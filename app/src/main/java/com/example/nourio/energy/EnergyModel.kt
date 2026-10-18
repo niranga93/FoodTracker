@@ -10,13 +10,11 @@ enum class BurnSource(val label: String) {
     BMR_ONLY("resting estimate only (no activity data)")
 }
 
-/** deviceBmr: basal metabolic rate from a watch via Health Connect, kcal/day, used instead of the formula. */
 data class Body(
     val weightKg: Double,
     val heightCm: Double,
     val age: Int,
-    val sex: String,
-    val deviceBmr: Double? = null
+    val sex: String
 )
 
 data class DayEnergy(
@@ -78,15 +76,8 @@ object EnergyModel {
         return (10.0 * b.weightKg + 6.25 * b.heightCm - 5.0 * b.age + s).coerceAtLeast(800.0)
     }
 
-    /** True when the device's BMR is used: it must be within 25% of the formula to rule out bad readings. */
-    fun usesDeviceBmr(b: Body): Boolean {
-        val d = b.deviceBmr ?: return false
-        val f = formulaBmr(b)
-        return d in (0.75 * f)..(1.25 * f)
-    }
-
-    /** Resting energy expenditure, kcal/day: the device's measured BMR when plausible, otherwise the formula. */
-    fun bmr(b: Body): Double = if (usesDeviceBmr(b)) b.deviceBmr!! else formulaBmr(b)
+    /** Resting energy expenditure, kcal/day. */
+    fun bmr(b: Body): Double = formulaBmr(b)
 
     /** Net walking energy for a number of steps. */
     fun stepKcal(steps: Long, b: Body): Double {

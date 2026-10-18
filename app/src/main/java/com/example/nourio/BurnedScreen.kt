@@ -125,7 +125,7 @@ fun BurnedScreen(db: MealDb, dayOffset: Int, onDayChange: (Int) -> Unit, inner: 
             if (features.isOn("burn_steps")) item { StepsCard(week, remember { GoalStore(context).load().stepGoal }) }
             bodyDays?.let { d ->
                 val first = d.first()
-                if (features.isOn("burn_workouts") && first.workouts.isNotEmpty()) {
+                if (features.isOn("burn_workouts")) {
                     item { WorkoutsCard(first, dayOffset) }
                 }
             }
@@ -133,9 +133,7 @@ fun BurnedScreen(db: MealDb, dayOffset: Int, onDayChange: (Int) -> Unit, inner: 
                 Expandable("Source data") {
                     ActivityCard(dayOffset)
                     Text(
-                        (if (EnergyModel.usesDeviceBmr(body))
-                            "Resting burn uses the basal metabolic rate from your watch (${body.deviceBmr!!.f0()} kcal a day). "
-                        else "Resting burn comes from your profile. ") +
+                        "Resting burn comes from your profile. " +
                             "Activity comes from Health Connect, or from your steps and distance. " +
                             "Estimates can be off by 10 to 20%.",
                         style = MaterialTheme.typography.bodySmall,

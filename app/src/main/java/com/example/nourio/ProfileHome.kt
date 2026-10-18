@@ -114,7 +114,7 @@ fun ProfileHub(db: MealDb, onOpenPage: (String) -> Unit, inner: PaddingValues) {
             Divider()
             IconRow(
                 Icons.Filled.Favorite, Pink, "Sleep, heart rate and vitals",
-                if (health.enabled && health.readExtras) "Sleep, heart rate, VO2 max, oxygen"
+                if (health.enabled && health.readExtras) "Sleep, heart rate, workouts, distance"
                 else "Connect Health Connect to see them"
             ) { onOpenPage("body:0") }
             Divider()

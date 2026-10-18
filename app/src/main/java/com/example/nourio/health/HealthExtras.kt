@@ -5,7 +5,6 @@ import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
-import androidx.health.connect.client.records.BasalMetabolicRateRecord
 import androidx.health.connect.client.records.BloodPressureRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSegment
@@ -15,10 +14,7 @@ import androidx.health.connect.client.records.HeightRecord
 import androidx.health.connect.client.records.HydrationRecord
 import androidx.health.connect.client.records.MealType
 import androidx.health.connect.client.records.NutritionRecord
-import androidx.health.connect.client.records.OxygenSaturationRecord
-import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
-import androidx.health.connect.client.records.Vo2MaxRecord
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.AggregateRequest
@@ -85,9 +81,6 @@ data class DayBody(
     val workouts: List<Workout>,
     // Optional types: null when not recorded or not allowed
     val stages: SleepStages? = null,
-    val restingHr: Long? = null,
-    val spo2: Double? = null,               // average %, that day
-    val vo2max: Double? = null,             // latest in the 30 days up to that day, mL/kg/min
     val distanceKm: Double? = null
 )
 
@@ -101,14 +94,10 @@ object HealthExtras {
     )
 
     // Added later and optional: each one is read only when it was allowed
-    val P_BMR = HealthPermission.getReadPermission(BasalMetabolicRateRecord::class)
     val P_HEIGHT = HealthPermission.getReadPermission(HeightRecord::class)
-    val P_RESTING_HR = HealthPermission.getReadPermission(RestingHeartRateRecord::class)
-    val P_SPO2 = HealthPermission.getReadPermission(OxygenSaturationRecord::class)
-    val P_VO2 = HealthPermission.getReadPermission(Vo2MaxRecord::class)
     val P_DISTANCE = HealthPermission.getReadPermission(DistanceRecord::class)
     val P_BLOOD_PRESSURE = HealthPermission.getReadPermission(BloodPressureRecord::class)
-    val MORE_READ_PERMS = setOf(P_BMR, P_HEIGHT, P_RESTING_HR, P_SPO2, P_VO2, P_DISTANCE, P_BLOOD_PRESSURE)
+    val MORE_READ_PERMS = setOf(P_HEIGHT, P_DISTANCE, P_BLOOD_PRESSURE)
 
     val WRITE_PERMS = setOf(
         HealthPermission.getWritePermission(NutritionRecord::class),
@@ -224,25 +213,6 @@ object HealthExtras {
                 .sortedBy { it.start }
         }.getOrDefault(emptyList())
 
-        val restingHr = if (P_RESTING_HR !in granted) null else runCatching {
-            client.aggregate(AggregateRequest(setOf(RestingHeartRateRecord.BPM_AVG), dayRange))[RestingHeartRateRecord.BPM_AVG]
-        }.getOrNull()
-
-        val spo2 = if (P_SPO2 !in granted) null else runCatching {
-            client.readRecords(ReadRecordsRequest(OxygenSaturationRecord::class, dayRange)).records
-                .map { it.percentage.value }.filter { it in 50.0..100.0 }.takeIf { it.isNotEmpty() }?.average()
-        }.getOrNull()
-
-        val vo2 = if (P_VO2 !in granted) null else runCatching {
-            client.readRecords(
-                ReadRecordsRequest(
-                    Vo2MaxRecord::class,
-                    TimeRangeFilter.between(start.minus(30, ChronoUnit.DAYS), end),
-                    ascendingOrder = false, pageSize = 1
-                )
-            ).records.firstOrNull()?.vo2MillilitersPerMinuteKilogram
-        }.getOrNull()
-
         val distance = if (P_DISTANCE !in granted) null else runCatching {
             client.aggregate(AggregateRequest(setOf(DistanceRecord.DISTANCE_TOTAL), dayRange))[DistanceRecord.DISTANCE_TOTAL]
                 ?.inKilometers
@@ -255,30 +225,13 @@ object HealthExtras {
             hrMax = hr?.get(HeartRateRecord.BPM_MAX),
             workouts = workouts,
             stages = stages,
-            restingHr = restingHr,
-            spo2 = spo2,
-            vo2max = vo2,
             distanceKm = distance
         )
     }
 
-    /**
-     * Basal metabolic rate and height from a watch, scale or health app.
-     * BMR feeds the burn estimate; height only fills an empty profile field, never overwrites one.
-     */
+    /** Height from a scale or health app. Only fills an empty profile field, never overwrites one. */
     suspend fun importBodyMeasurements(context: Context, client: HealthConnectClient, granted: Set<String>) {
-        val prefs = HealthPrefs(context)
         val now = Instant.now()
-        if (P_BMR in granted) {
-            val latest = client.readRecords(
-                ReadRecordsRequest(
-                    BasalMetabolicRateRecord::class,
-                    TimeRangeFilter.between(now.minus(30, ChronoUnit.DAYS), now),
-                    ascendingOrder = false, pageSize = 1
-                )
-            ).records.firstOrNull()
-            prefs.deviceBmr = latest?.basalMetabolicRate?.inKilocaloriesPerDay?.takeIf { it in 800.0..4000.0 } ?: 0.0
-        }
         if (P_HEIGHT in granted) {
             val store = ProfileStore(context)
             val profile = store.load()
@@ -480,6 +433,7 @@ object HealthSync {
     private suspend fun run(context: Context) {
         if (HealthConnectClient.getSdkStatus(context) != HealthConnectClient.SDK_AVAILABLE) return
         val prefs = HealthPrefs(context)
+        prefs.clearLegacyBmr()
         if (!prefs.enabled || (!prefs.readExtras && !prefs.writeSync)) return
 
         val client = HealthConnectClient.getOrCreate(context)
@@ -490,8 +444,6 @@ object HealthSync {
             HealthExtras.importWeights(context, client)
             runCatching { HealthExtras.importBodyMeasurements(context, client, granted) }
                 .onFailure { Log.w("HealthSync", "body measurements failed", it) }
-        } else {
-            prefs.deviceBmr = 0.0          // reading switched off: stop using the device's BMR
         }
         if (prefs.writeSync && granted.containsAll(HealthExtras.WRITE_PERMS)) {
             val db = MealDb(context)

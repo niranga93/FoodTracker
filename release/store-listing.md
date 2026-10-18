@@ -36,13 +36,13 @@ A DASHBOARD THAT MOTIVATES
 
 INSIGHTS FROM YOUR OWN DATA
 - Finds links between food, sleep, steps, heart rate, blood pressure and weight, for example whether you eat more after short nights
-- Spots trends, like a resting heart rate that is creeping up
+- Spots trends, like blood pressure that is creeping up
 - A daily tip with a one-tap Accept that updates your goals
 - All analysis happens on your phone
 
 CONNECT YOUR HEALTH DATA
-- Steps, calories burned, sleep and sleep stages, heart rate, VO2 max, blood oxygen and weight from Health Connect
-- Uses your watch's basal metabolic rate and distance for a more accurate burn
+- Steps, calories burned, sleep and sleep stages, heart rate, workouts and weight from Health Connect
+- Uses your watch's distance for a more accurate burn
 - Optionally share your meals, water and weight back to Health Connect
 
 YOUR DATA STAYS YOURS

@@ -165,7 +165,7 @@ object Actions {
     }
 
     private suspend fun revokeHealthConnect(context: Context) {
-        HealthPrefs(context).apply { enabled = false; readExtras = false; writeSync = false; deviceBmr = 0.0 }
+        HealthPrefs(context).apply { enabled = false; readExtras = false; writeSync = false; clearLegacyBmr() }
         if (HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE) {
             runCatching { HealthConnectClient.getOrCreate(context).permissionController.revokeAllPermissions() }
         }

@@ -17,14 +17,6 @@ object EnergyRepo {
         appContext = context.applicationContext
     }
 
-    /** BMR from Health Connect, only while reading is switched on. */
-    private fun deviceBmr(): Double? {
-        val ctx = appContext ?: return null
-        val prefs = HealthPrefs(ctx)
-        if (!prefs.enabled || !prefs.readExtras) return null
-        return prefs.deviceBmr.takeIf { it > 0 }
-    }
-
     /** Returns a Body, or null plus a message explaining what's missing. */
     fun body(profile: Profile): Pair<Body?, String?> {
         if (profile.heightCm <= 0 || profile.weightKg <= 0 || profile.birthYear <= 0) {
@@ -34,7 +26,7 @@ object EnergyRepo {
         if (age < 18) {
             return null to "Calorie balance estimates are only available for adults (18+)."
         }
-        return Body(profile.weightKg, profile.heightCm, age, profile.sex, deviceBmr()) to null
+        return Body(profile.weightKg, profile.heightCm, age, profile.sex) to null
     }
 
     private val activityCache = HashMap<String, Pair<Long, DayActivity>>()

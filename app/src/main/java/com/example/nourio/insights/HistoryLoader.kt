@@ -5,7 +5,6 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.aggregate.AggregateMetric
 import androidx.health.connect.client.records.BloodPressureRecord
 import androidx.health.connect.client.records.HeartRateRecord
-import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.request.AggregateGroupByPeriodRequest
@@ -126,9 +125,6 @@ object HistoryLoader {
                 SleepNight.bedtimeShifts(values.mapNotNull { (d, v) -> v[Metric.BEDTIME]?.let { d to it } }.toMap())
                     .forEach { (date, shift) -> values[date]?.set(Metric.BEDTIME_SHIFT, shift) }
             }
-        }
-        if (HealthExtras.P_RESTING_HR in granted) {
-            daily(RestingHeartRateRecord.BPM_AVG) { v, r -> v[Metric.RESTING_HR] = r.toDouble() }
         }
         if (HealthExtras.P_BLOOD_PRESSURE in granted) {
             daily(BloodPressureRecord.SYSTOLIC_AVG) { v, r -> v[Metric.SYSTOLIC] = r.inMillimetersOfMercury }

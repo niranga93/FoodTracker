@@ -127,12 +127,9 @@ private fun StagesBar(s: SleepStages) {
 @Composable
 fun HeartRateCard(days: List<DayBody>) {
     val today = days.first()
-    // Resting heart rate is the steadier fitness signal, so it drives the trend when the watch records it
-    val resting = days.reversed().mapNotNull { it.restingHr?.toDouble() }
-    val trend = resting.takeIf { it.size >= 2 } ?: days.reversed().mapNotNull { it.hrAvg?.toDouble() }
+    val trend = days.reversed().mapNotNull { it.hrAvg?.toDouble() }
     WidgetCard("Heart rate") {
         Row(Modifier.fillMaxWidth()) {
-            if (today.restingHr != null) Metric("Resting", "${today.restingHr}", Modifier.weight(1f))
             Metric("Average", today.hrAvg?.let { "$it" } ?: "—", Modifier.weight(1f))
             Metric("Lowest", today.hrMin?.let { "$it" } ?: "—", Modifier.weight(1f))
             Metric("Highest", today.hrMax?.let { "$it" } ?: "—", Modifier.weight(1f))
@@ -147,7 +144,7 @@ fun HeartRateCard(days: List<DayBody>) {
             Spacer(Modifier.height(12.dp))
             Sparkline(trend, Modifier.fillMaxWidth().height(48.dp))
             Text(
-                if (resting.size >= 2) "Resting heart rate, last 7 days" else "Daily average, last 7 days",
+                "Daily average, last 7 days",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -155,18 +152,15 @@ fun HeartRateCard(days: List<DayBody>) {
     }
 }
 
-/** VO2 max, blood oxygen and distance for the selected day. Hidden when none are recorded. */
+/** Distance for the selected day. Hidden when none is recorded. */
 @Composable
 fun VitalsCard(day: DayBody, dayOffset: Int) {
-    WidgetCard(if (dayOffset == 0) "Fitness and vitals today" else "Fitness and vitals that day") {
+    WidgetCard(if (dayOffset == 0) "Distance today" else "Distance that day") {
         Row(Modifier.fillMaxWidth()) {
-            day.vo2max?.let { Metric("VO2 max", "%.1f".format(it), Modifier.weight(1f)) }
-            day.spo2?.let { Metric("Blood oxygen", "${it.f0()}%", Modifier.weight(1f)) }
             day.distanceKm?.let { Metric("Distance", "${"%.1f".format(it)} km", Modifier.weight(1f)) }
         }
         Text(
-            "From your watch or phone through Health Connect. VO2 max is mL/kg/min, the latest in 30 days. " +
-                "For information only, not medical advice.",
+            "From your watch or phone through Health Connect.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp)
@@ -184,6 +178,14 @@ fun WorkoutsCard(day: DayBody, dayOffset: Int) {
         if (dayOffset == 0) "Workouts today" else "Workouts that day",
         trailing = { Pill(hm(total).removePrefix("0h ") + if (kcal >= 1) " · ${kcal.f0()} kcal" else "") }
     ) {
+        if (day.workouts.isEmpty()) {
+            Text(
+                "No workouts recorded. Sessions from your watch or fitness app appear here, " +
+                    "and their calories count toward your burn.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         day.workouts.forEachIndexed { i, w ->
             if (i > 0) HorizontalDivider(Modifier.padding(vertical = 6.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -244,8 +246,7 @@ fun BodyPage(dayOffset: Int) {
         return
     }
     val first = d.first()
-    val any = d.any { it.sleepMinutes != null || it.hrAvg != null || it.restingHr != null } ||
-        first.vo2max != null || first.spo2 != null || first.distanceKm != null
+    val any = d.any { it.sleepMinutes != null || it.hrAvg != null } || first.distanceKm != null
     if (!any) {
         WidgetCard("Nothing recorded yet") {
             Text(
@@ -256,6 +257,7 @@ fun BodyPage(dayOffset: Int) {
         }
     }
     if (d.any { it.sleepMinutes != null }) SleepCard(d, dayOffset)
-    if (d.any { it.hrAvg != null || it.restingHr != null }) HeartRateCard(d)
-    if (first.vo2max != null || first.spo2 != null || first.distanceKm != null) VitalsCard(first, dayOffset)
+    if (d.any { it.hrAvg != null }) HeartRateCard(d)
+    if (first.distanceKm != null) VitalsCard(first, dayOffset)
+    WorkoutsCard(first, dayOffset)
 }

@@ -4,7 +4,7 @@
    Left out:
    - gemini_user_keys: encrypted with a Keystore key that never leaves this phone, so a copy
      could not be decrypted anywhere else.
-   - health, insights: values derived from Health Connect (basal metabolic rate, sync records,
+   - health, insights: values derived from Health Connect (sync records,
      tips based on sleep, heart rate and blood pressure). The privacy policy promises these stay
      on the phone.
 -->

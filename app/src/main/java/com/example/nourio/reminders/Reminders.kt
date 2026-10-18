@@ -1,5 +1,6 @@
 package com.example.nourio.reminders
 
+import android.annotation.SuppressLint
 import android.Manifest
 import android.app.AlarmManager
 import android.app.NotificationChannel
@@ -344,6 +345,7 @@ object Reminders {
         }
     }
 
+    @SuppressLint("MissingPermission")   // allowed() checks POST_NOTIFICATIONS
     private fun notify(context: Context, m: Message): Boolean {
         if (!NotificationChannels.allowed(context)) return false
         val open = PendingIntent.getActivity(

@@ -1,5 +1,6 @@
 package com.example.nourio.reminders
 
+import android.annotation.SuppressLint
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -57,6 +58,7 @@ object NotificationChannels {
     }
 
     /** From Settings: proves the whole path works on this phone. */
+    @SuppressLint("MissingPermission")   // allowed() checks POST_NOTIFICATIONS
     fun sendTest(context: Context): Boolean {
         if (!allowed(context)) return false
         val n = builder(context, REMINDERS)

@@ -1,5 +1,6 @@
 package com.example.nourio.plan
 
+import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -51,6 +52,7 @@ class StandardsWorker(context: Context, params: WorkerParameters) : CoroutineWor
         }
 
         /** "Sodium limit: 2,300 mg a day now, 2,000 mg a day recommended." Opens Goals to approve or reject. */
+        @SuppressLint("MissingPermission")   // allowed() checks POST_NOTIFICATIONS
         fun notifyChanges(context: Context, changes: List<Proposal>) {
             if (!NotificationChannels.allowed(context)) return
             val open = PendingIntent.getActivity(

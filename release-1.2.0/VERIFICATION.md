@@ -1,4 +1,4 @@
-# Release verification: Nourio 1.2.0 (versionCode 3)
+# Release verification: Nourio 1.2.0 (versionCode 4)
 
 Checked on 24 October 2026, at commit `b5a58fd` (`main`).
 
@@ -9,8 +9,8 @@ Checked on 24 October 2026, at commit `b5a58fd` (`main`).
 | Android Lint (release) | 0 errors, 5 warnings |
 | Unit tests | 223 pass, 0 fail; 8 skipped on purpose (store-screenshot renders and a live certificate check) |
 | Code review | Full review of every change since 1.1.0; all 10 findings fixed in `b5a58fd` |
-| Release bundle | `nourio-1.2.0-3.aab`, 31.8 MB |
-| Release APK | `nourio-1.2.0-3.apk`, 33.9 MB |
+| Release bundle | `nourio-1.2.0-4.aab`, 31.8 MB |
+| Release APK | `nourio-1.2.0-4.apk`, 33.9 MB |
 | R8 | Code and resource shrinking on; ML Kit kept (the barcode scanner crashed under R8 before) |
 
 ## Signing
@@ -22,7 +22,7 @@ Checked on 24 October 2026, at commit `b5a58fd` (`main`).
 ## Manifest (read from the APK)
 | Check | Result |
 |---|---|
-| Package / version | `com.nnrzone.nourio`, 1.2.0 (3) |
+| Package / version | `com.nnrzone.nourio`, 1.2.0 (4) |
 | Target SDK | 37 |
 | Health Connect reads | STEPS, ACTIVE_CALORIES_BURNED, TOTAL_CALORIES_BURNED, SLEEP, HEART_RATE, EXERCISE, WEIGHT, HEIGHT, DISTANCE, BLOOD_PRESSURE |
 | Health Connect writes | NUTRITION, HYDRATION, WEIGHT |

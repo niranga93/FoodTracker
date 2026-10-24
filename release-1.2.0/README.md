@@ -1,16 +1,16 @@
 # Nourio 1.2.0: Google Play release kit
 
-**Nourio 1.2.0 (versionCode 3)**, built on 24 October 2026 from commit `b5a58fd` on `main` (includes the fixes from the pre-release code review). It updates 1.1.0, which is live on Google Play.
+**Nourio 1.2.0 (versionCode 4)**, built on 24 October 2026 from commit `b5a58fd` on `main` (includes the fixes from the pre-release code review). It updates 1.1.0, which is live on Google Play.
 
-The older `release/nourio-1.2.0-3.*` files and `release-1.2.0-outdated/` (24 October, 00:04) were built before the forecast, budget, barcode and review fixes. **Upload the bundle from this folder, not those.**
+**Why versionCode 4:** an early 1.2.0 bundle (versionCode 3, built 24 October 00:04, before the forecast, budget, barcode and review fixes) was uploaded to a Production draft that was never sent for review. Play doesn't allow a version code to be reused, so that draft was discarded on 24 October and this final build is versionCode 4. The old bundle stays unused in Play Console's bundle library.
 
 ## What's in this folder
 
 | File | What it is | In git? |
 |---|---|---|
-| `nourio-1.2.0-3.aab` | **Upload this to Play.** Signed release bundle | No |
-| `nourio-1.2.0-3.apk` | Same build as an APK, for testing on a phone | No |
-| `mapping-1.2.0-3.txt` | R8 mapping for readable crash reports. Play also reads it from the bundle. | No |
+| `nourio-1.2.0-4.aab` | **Upload this to Play.** Signed release bundle | No |
+| `nourio-1.2.0-4.apk` | Same build as an APK, for testing on a phone | No |
+| `mapping-1.2.0-4.txt` | R8 mapping for readable crash reports. Play also reads it from the bundle. | No |
 | `SHA256SUMS.txt` | Checksums of the files above | Yes |
 | `VERIFICATION.md` | What was checked for this build | Yes |
 | `upload_certificate.pem` | Public certificate of the upload key | Yes |
@@ -37,9 +37,9 @@ The APK is signed with the upload key, so it can't update the Play-installed app
 
 ### 2. Upload
 - [ ] Play Console > Nourio > Test and release > Production (or your testing track) > **Create new release**.
-- [ ] Upload `nourio-1.2.0-3.aab`.
+- [ ] Upload `nourio-1.2.0-4.aab`.
 - [ ] Paste the release notes from `store-listing.md` (446 of 500 characters).
-- [ ] Review the release. Play should show versionCode 3 replacing 2, and **no new permissions**.
+- [ ] Review the release. Play should show versionCode 4 replacing 2, and **no new permissions**.
 
 ### 3. Declarations
 - [ ] Data safety: no change. Same data types, sent to the same places.

@@ -124,8 +124,10 @@ alcohol, honey. Use an empty list if none apply.
         runCatching {
             AiConsent.require(use)
             AiProgress.begin(AiStage.ASKING)
-            Llm.complete(LlmRequest(system, listOf(LlmTurn("user", user)), temperature = 0.4, maxTokens = 1024))
-                .also { AiProgress.end() }
+            // Cleared even when the request fails, so the next status line doesn't show this one's model and time
+            try {
+                Llm.complete(LlmRequest(system, listOf(LlmTurn("user", user)), temperature = 0.4, maxTokens = 1024))
+            } finally { AiProgress.end() }
         }
     }
 
@@ -135,8 +137,9 @@ alcohol, honey. Use an empty list if none apply.
             runCatching {
                 AiConsent.require(use)
                 AiProgress.begin(AiStage.ASKING)
-                Llm.complete(LlmRequest(system, turns.map { (role, text) -> LlmTurn(role, text) }, schema, temperature = 0.2))
-                    .also { AiProgress.end() }
+                try {
+                    Llm.complete(LlmRequest(system, turns.map { (role, text) -> LlmTurn(role, text) }, schema, temperature = 0.2))
+                } finally { AiProgress.end() }
             }
         }
 

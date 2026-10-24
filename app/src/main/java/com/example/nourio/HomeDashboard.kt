@@ -82,7 +82,7 @@ data class WeightLine(val kg: Double, val weekChange: Double?)
  * beside it, since the scale is what the week's balance is heading toward.
  */
 @Composable
-fun WeekCard(week: List<DayEnergy>, budgetKcal: Double, weight: WeightLine?, onOpenWeight: () -> Unit) {
+fun WeekCard(week: List<DayEnergy>, budgetKcal: Double, weight: WeightLine?, planChangeKcal: Double? = null, onOpenWeight: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     val ordered = week.reversed()                         // oldest on the left
     val logged = ordered.filter { it.logComplete || (it.offset == 0 && it.eaten > 0) }
@@ -131,7 +131,19 @@ fun WeekCard(week: List<DayEnergy>, budgetKcal: Double, weight: WeightLine?, onO
         }
 
         Spacer(Modifier.height(14.dp))
-        val underBudget = if (budgetKcal > 0) finished.count { it.eaten <= budgetKcal } else null
+        // A past day's budget was its own burn and the plan (with the same safety limits), so it's judged on that;
+        // otherwise the fixed goal
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        val body = remember {
+            com.example.nourio.energy.EnergyRepo.body(com.example.nourio.data.ProfileStore(ctx).load()).first
+        }
+        fun dayBudget(d: DayEnergy): Double {
+            val plan = planChangeKcal ?: return budgetKcal
+            val wanted = d.burned + plan
+            if (wanted >= d.burned || body == null) return wanted
+            return maxOf(wanted, com.example.nourio.plan.BudgetModel.lowestBudget(body, d.burned).first)
+        }
+        val underBudget = if (budgetKcal > 0) finished.count { it.eaten <= dayBudget(it) + 0.5 } else null
         val best = finished.minByOrNull { it.balance }
         Row(Modifier.fillMaxWidth()) {
             StatCell("${logged.size}/7", "days logged", Modifier.weight(1f))

@@ -214,7 +214,7 @@ class StoreScreenshotsTest {
 
     @Test fun s6_profile() {
         rule.setContent { App(NavTab.Profile) }
-        waitFor("Estimated (food − burn)")   // the chart loads after the card
+        waitFor("Today")   // the chart's date axis: the chart loads after the card
         save("07-profile")
     }
 }

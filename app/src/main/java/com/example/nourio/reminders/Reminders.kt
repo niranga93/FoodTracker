@@ -263,9 +263,15 @@ object Reminders {
                 )
             }
             val lastId = context.getSharedPreferences("reminders_sent", Context.MODE_PRIVATE).getString("tip_last", null)
-            val tip = DailyTip.pick(days, GoalStore(context).load(), water.goalMl, today.dayOfYear, lastId, bodyTips)
+            // Urgent body tips keep their own once-in-3-days limit here too, or the daily tip would repeat them
+            val sent = context.getSharedPreferences("reminders_sent", Context.MODE_PRIVATE)
+            val bodyForTip = bodyTips.filter { !it.urgent || now - sent.getLong("body_${it.id}", 0L) > 3 * 86_400_000L }
+            val tip = DailyTip.pick(days, GoalStore(context).load(), water.goalMl, today.dayOfYear, lastId, bodyForTip)
             notify(context, Message(today.toEpochDay(), tip.title, tip.body, "home", NotificationChannels.TIPS, private = true))
-            context.getSharedPreferences("reminders_sent", Context.MODE_PRIVATE).edit { putString("tip_last", tip.id) }
+            sent.edit {
+                putString("tip_last", tip.id)
+                if (bodyTips.any { it.id == tip.id }) putLong("body_${tip.id}", now)   // counts toward its 3-day limit
+            }
         }
         prefs.markSent(Reminder.DAILY_TIP, today.toEpochDay())
     }

@@ -55,6 +55,9 @@ object GeminiRouter {
     @Volatile private var currentKey: String? = null
     // The model that answered last: tried first next time, so a busy best model isn't retried every request
     @Volatile private var currentModel: String? = null
+    @Volatile private var currentModelAt = 0L
+    // A fallback that answered during a busy spell is kept for a while, then the best model gets another turn
+    private const val STICKY_MODEL_MS = 15 * 60 * 1000L
 
     private val catalogLock = Mutex()
     @Volatile private var catalog: List<String> = emptyList()
@@ -193,10 +196,13 @@ object GeminiRouter {
         var waitMs = 2000L
         var lastError = "unknown"
         for (round in 0 until ROUNDS) {
+            // A retry round is for the models that were busy a moment ago, so their short cooldown is lifted
+            if (round > 0) busyUntil.clear()
             var triedAny = false
             val start = keys.indexOf(currentKey).coerceAtLeast(0)
         // The model that worked last goes first; the rest keep their best-first order
-        val order = currentModel?.takeIf { it in models }?.let { listOf(it) + (models - it) } ?: models
+        val order = currentModel?.takeIf { it in models && now() - currentModelAt < STICKY_MODEL_MS }
+            ?.let { listOf(it) + (models - it) } ?: models
             keyLoop@ for (step in keys.indices) {
                 val i = (start + step) % keys.size
                 val key = keys[i]
@@ -215,6 +221,7 @@ object GeminiRouter {
                             if (currentKey != key) Log.d("Gemini", "now using key #${i + 1}")
                             currentKey = key
                             currentModel = model
+                            currentModelAt = now()
                             return a.raw
                         }
                         is Attempt.Fail -> {
@@ -282,8 +289,11 @@ object GeminiRouter {
             }
         }
     } catch (e: java.io.InterruptedIOException) {
-        // Timed out: the model is slow right now, so the next one gets a turn (the connection itself works)
-        Attempt.Fail(Failure.OVERLOADED, "$model timed out")
+        // Couldn't even connect: the network is the problem, so stop rather than try every model and key.
+        // Connected but no reply in time: this model is slow right now, so the next one gets a turn.
+        val msg = e.message.orEmpty().lowercase()
+        if ("connect" in msg) Attempt.Fail(Failure.NETWORK, "Network error: ${e.message}")
+        else Attempt.Fail(Failure.OVERLOADED, "$model timed out")
     } catch (e: IOException) {
         Attempt.Fail(Failure.NETWORK, "Network error: ${e.message}")
     }

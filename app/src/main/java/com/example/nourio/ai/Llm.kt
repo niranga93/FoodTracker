@@ -87,8 +87,17 @@ object Llm {
     internal fun isImageRejection(code: Int, body: String): Boolean {
         if (code != 400 && code != 404 && code != 422) return false
         val b = body.lowercase()
-        return listOf("image", "vision", "multimodal", "modalit", "image_url").any { it in b } &&
-            listOf("support", "not ", "invalid", "unsupported", "cannot", "can't", "does not").any { it in b }
+        // Only a model saying it can't take images at all. "Invalid image", "image too large" or a bad
+        // encoding are problems with this photo, and must not mark the model text-only for good.
+        if (listOf("too large", "exceed", "size", "base64", "decode", "corrupt", "dimension", "resolution").any { it in b }) return false
+        val noImages = listOf(
+            "does not support image", "doesn't support image", "do not support image", "not support images",
+            "image input is not supported", "images are not supported", "image inputs are not supported",
+            "does not support vision", "vision is not supported", "not a vision model", "no vision",
+            "does not support multimodal", "multimodal is not supported", "only supports text", "text-only",
+            "text only model", "does not accept image", "image_url is not supported", "unsupported content type: image",
+        )
+        return noImages.any { it in b } || ("modalit" in b && "image" in b && ("not supported" in b || "unsupported" in b))
     }
 
     // ------------------------------------------------------------ Gemini (unchanged routing)

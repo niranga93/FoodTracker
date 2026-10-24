@@ -138,7 +138,7 @@ object AiSettings {
     fun photosSupported(): Boolean = when {
         !provider.photos -> false
         provider == Provider.GEMINI -> true
-        else -> ModelCaps.photoModel(provider, model()) != null
+        else -> ModelCaps.photoModel(provider, model()) != null       // unknown support counts as yes, see photoModel
     }
 
     fun refresh() { _available.value = isReady() }

@@ -174,7 +174,8 @@ fun HomeScreen(
 
         // 3. The week, with weight folded in
         if (features.isOn("home_week") && week.isNotEmpty()) item {
-            WeekCard(week, goalKcal, weightLine) { openPage("weight") }
+            // With a burn-based budget each past day is judged against its own budget, not today's
+            WeekCard(week, goalKcal, weightLine, planChangeKcal = budget?.takeIf { it.dayBurnKcal != null }?.planChangeKcal) { openPage("weight") }
         }
     }
 }

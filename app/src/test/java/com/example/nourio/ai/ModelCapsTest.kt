@@ -59,10 +59,17 @@ class ModelCapsTest {
     }
 
     @Test
-    fun photosGoToAVisionModelWhenTheChosenOneIsTextOnly() {
+    fun aTextOnlyChoiceNeverSendsPhotosToAnArbitraryModel() {
+        // x/vision is on the account but wasn't chosen and isn't one of the app's suggestions (it could be paid)
         ModelCaps.remember(ctx, Provider.OPENROUTER, listOf(ModelInfo("x/text", false), ModelInfo("x/vision", true)))
-        assertEquals("x/vision", ModelCaps.photoModel(Provider.OPENROUTER, "x/text"))
+        assertNull(ModelCaps.photoModel(Provider.OPENROUTER, "x/text"))
         assertEquals("x/vision", ModelCaps.photoModel(Provider.OPENROUTER, "x/vision"))
+    }
+
+    @Test
+    fun aModelWithUnknownPhotoSupportIsTried() {
+        // Upgraded users who never loaded the model list keep photos; a refusal teaches the app
+        assertEquals("openai/gpt-4o", ModelCaps.photoModel(Provider.OPENROUTER, "openai/gpt-4o"))
     }
 
     @Test
@@ -77,7 +84,7 @@ class ModelCapsTest {
         ModelCaps.remember(ctx, Provider.OPENROUTER, listOf(ModelInfo("x/a", true), ModelInfo("x/b", true)))
         ModelCaps.markTextOnly(Provider.OPENROUTER, "x/a")
         assertEquals(false, ModelCaps.readsImages(Provider.OPENROUTER, "x/a"))
-        assertEquals("x/b", ModelCaps.photoModel(Provider.OPENROUTER, "x/a"))
+        assertNull(ModelCaps.photoModel(Provider.OPENROUTER, "x/a"))
     }
 
     @Test
@@ -85,5 +92,8 @@ class ModelCapsTest {
         assertTrue(Llm.isImageRejection(400, """{"error":{"message":"This model does not support image input"}}"""))
         assertFalse(Llm.isImageRejection(400, """{"error":{"message":"max_tokens is too large"}}"""))
         assertFalse(Llm.isImageRejection(500, "image not supported"))
+        // A problem with this photo, not the model: must not mark it text-only for good
+        assertFalse(Llm.isImageRejection(400, """{"error":{"message":"Invalid image: image exceeds 20MB"}}"""))
+        assertFalse(Llm.isImageRejection(400, """{"error":{"message":"image_url is not a valid base64 string"}}"""))
     }
 }

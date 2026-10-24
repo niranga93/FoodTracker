@@ -139,10 +139,12 @@ object ModelCaps {
      */
     fun photoModel(p: Provider, chosen: String?): String? {
         if (!p.photos) return null
-        if (chosen != null && readsImages(p, chosen) == true) return chosen
-        val list = saved(p)
-        val listed = list.keys().asSequence().filter { list.optBoolean(it) && it !in learnedTextOnly(p) }.toList()
-        return (p.suggested + listed).firstOrNull { readsImages(p, it) == true }
+        // The chosen model is tried unless it's known to be text-only: when support is unknown, a refusal
+        // teaches us (markTextOnly), which is better than blocking photos for it
+        if (chosen != null && readsImages(p, chosen) != false) return chosen
+        // Otherwise only the app's own suggested models, never an arbitrary one from the account's list,
+        // which could be a different or paid model the person didn't pick
+        return p.suggested.firstOrNull { it != chosen && readsImages(p, it) == true && it !in learnedTextOnly(p) }
     }
 
     /** Status line for the model picker. */

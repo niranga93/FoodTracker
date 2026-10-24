@@ -130,7 +130,10 @@ fun GoalsCard(goalStore: GoalStore, db: MealDb, autoSave: Boolean = false) {
     WidgetCard("Daily limits") {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             val planKcal = budget?.takeIf { it.plan != null }?.baseKcal
-            if (plan.targetKg > 0 && plan.useTargetGoal) {
+            // The plan sets calories only when it was accepted (a target under BMI 18.5, or a profile missing
+            // height or age, means the typed goal is used), so otherwise the field stays editable
+            val planInUse = plan.targetKg > 0 && plan.useTargetGoal && (budget == null || planKcal != null)
+            if (planInUse) {
                 // The typed value isn't used while the target plan sets calories, so show the plan's figure instead
                 // Read-only, so shown as a tinted box rather than a field, with the same rounding as the fields
                 Column(
@@ -143,13 +146,18 @@ fun GoalsCard(goalStore: GoalStore, db: MealDb, autoSave: Boolean = false) {
                         style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        "Set by your target weight and pace below, from your average burn. Each day's budget also adjusts for going over or under the day before.",
+                        "Your goal on an average day, from your target weight and pace below. Each day's budget follows " +
+                            "that day's burn, and adjusts for going over or under the day before.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             } else {
                 GField("Calories", "kcal", kcal, Modifier.fillMaxWidth()) { kcal = it; saved = false }
+                if (plan.targetKg > 0 && plan.useTargetGoal) Text(
+                    budget?.planMessage ?: "Your target weight can't set calories yet. Add your height, weight and year of birth.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error
+                )
             }
 
             Text("Maximums", style = MaterialTheme.typography.labelMedium)

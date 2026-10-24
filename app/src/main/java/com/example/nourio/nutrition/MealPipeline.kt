@@ -23,7 +23,9 @@ object MealPipeline {
     suspend fun run(file: File): Result<Analysis> = withContext(Dispatchers.IO) {
         runCatching {
             com.example.nourio.ai.AiProgress.begin()
-            build(FoodAnalyzer.analyze(file).getOrThrow(), "No food detected in the photo", learned = true)
+            try {
+                build(FoodAnalyzer.analyze(file).getOrThrow(), "No food detected in the photo", learned = true)
+            } finally { com.example.nourio.ai.AiProgress.end() }    // the review shows the result; no stale status after
         }
     }
 
@@ -34,9 +36,11 @@ object MealPipeline {
     suspend fun runText(description: String): Result<Analysis> = withContext(Dispatchers.IO) {
         runCatching {
             com.example.nourio.ai.AiProgress.begin()
-            val content = RecipeFetcher.expand(description)
-            com.example.nourio.ai.AiProgress.stage(com.example.nourio.ai.AiStage.ASKING)
-            build(FoodAnalyzer.analyzeText(content).getOrThrow(), "No food found in that description", learned = false)
+            try {
+                val content = RecipeFetcher.expand(description)
+                com.example.nourio.ai.AiProgress.stage(com.example.nourio.ai.AiStage.ASKING)
+                build(FoodAnalyzer.analyzeText(content).getOrThrow(), "No food found in that description", learned = false)
+            } finally { com.example.nourio.ai.AiProgress.end() }
         }
     }
 

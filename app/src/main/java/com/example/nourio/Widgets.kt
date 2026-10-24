@@ -376,7 +376,8 @@ fun OutlookCard(db: MealDb) {
             !loaded -> Hint("Calculating…")
             p == null -> Hint("Log 3 full days of meals to see this.")
             else -> {
-                val w0 = weights.lastOrNull()?.kg ?: profile.weightKg
+                // Today's weight with water swings smoothed out, from the model and every weigh-in
+                val w0 = p.nowKg ?: weights.lastOrNull()?.kg ?: profile.weightKg
                 val now = System.currentTimeMillis()
                 val history = weights.takeLast(14)
                     .map { ((it.ts - now) / 86_400_000.0) to it.kg }
@@ -391,14 +392,37 @@ fun OutlookCard(db: MealDb) {
                     LegendDot(MaterialTheme.colorScheme.primary, "Weigh-ins")
                     LegendDot(MaterialTheme.colorScheme.secondary, "Outlook")
                 }
+                // Advice from the body model and weigh-ins, the same tips the morning notification picks from
+                result?.let { com.example.nourio.reminders.BodyTips.signals(it) }?.let { com.example.nourio.reminders.BodyTips.tips(it) }
+                    ?.sortedByDescending { it.score }?.take(2)?.forEach { tip ->
+                        Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
+                            Text(tip.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
+                                color = if (tip.urgent) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface)
+                            Hint(tip.body)
+                        }
+                    }
                 if (p.largeDeficit) {
                     Hint("Large daily deficit. If it's accurate, talk to a doctor or dietitian.",
                         Modifier.padding(top = 6.dp), error = true)
                 }
                 Expandable("How it's calculated") {
                     Hint("Based on ${p.usedDays} logged days: ${p.avgEaten.f0()} kcal eaten, ${p.avgBurned.f0()} burned a day.")
-                    if (result?.calibration != null || (result?.factor ?: 1.0) != 1.0) Hint("Adjusted using your weigh-ins.")
-                    Hint("Estimate only. About 7,700 kcal per kg.")
+                    p.gapKcal?.let { gap ->
+                        val sd = p.gapSd ?: 0.0
+                        Hint(
+                            if (kotlin.math.abs(gap) < 1.96 * sd || kotlin.math.abs(gap) < 50) "Your ${p.weighIns} weigh-ins match your log and activity well."
+                            else "Your ${p.weighIns} weigh-ins move as if you ${if (gap > 0) "eat about ${gap.f0()} kcal a day more, or burn less," else "eat about ${(-gap).f0()} kcal a day less, or burn more,"} " +
+                                "than the log and activity data say. The outlook includes this. Unlogged snacks, drinks and oils are the usual reason."
+                        )
+                    }
+                    p.waterKg?.takeIf { kotlin.math.abs(it) >= 0.3 }?.let { w ->
+                        Hint("About ${kotlin.math.abs(w).f1()} kg of today's weight is ${if (w > 0) "extra" else "missing"} water from recent carbs and salt. It isn't fat and passes.")
+                    }
+                    Hint(
+                        "Estimate only. The body model follows fat and lean tissue (a kg holds less energy the leaner " +
+                            "you are, not a fixed 7,700 kcal), slows your burn as weight falls and while eating less, " +
+                            "and counts water held with carbohydrate and salt. Weigh-ins correct it as they come in."
+                    )
                 }
             }
         }

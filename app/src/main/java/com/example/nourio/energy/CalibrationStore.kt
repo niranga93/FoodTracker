@@ -4,7 +4,11 @@ import androidx.core.content.edit
 import android.content.Context
 
 class CalibrationStore(context: Context) {
-    private val p = context.getSharedPreferences("calibration", Context.MODE_PRIVATE)
+    private val p = context.getSharedPreferences("calibration", Context.MODE_PRIVATE).also { prefs ->
+        // 1.2.0 counts everyday movement and digestion properly; a factor learned against the old, lower burn
+        // estimate would now over-correct, so it starts again from 1 and the weigh-ins relearn it
+        if (prefs.getInt("model", 1) < MODEL_VERSION) prefs.edit { clear(); putInt("model", MODEL_VERSION) }
+    }
 
     var factor: Double
         get() = p.getFloat("factor", 1f).toDouble()
@@ -20,4 +24,6 @@ class CalibrationStore(context: Context) {
         val next = if (!p.contains("day")) estimate else factor + 0.4 * (estimate - factor)
         p.edit { putFloat("factor", next.toFloat()).putLong("day", today) }
     }
+
+    private companion object { const val MODEL_VERSION = 2 }
 }

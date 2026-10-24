@@ -24,6 +24,8 @@ import com.example.nourio.data.Goals
 import com.example.nourio.data.Totals
 import com.example.nourio.health.SleepData
 import com.example.nourio.insights.Metric
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import java.text.NumberFormat
 
 // ------------------------------------------------------------------ Today
@@ -39,6 +41,7 @@ fun TodayCard(
     totals: Totals,
     budget: Double,
     burned: Double?,
+    breakdown: com.example.nourio.plan.Budget? = null,
     goals: Goals,
     weightKg: Double,
     waterMl: Int,
@@ -49,7 +52,8 @@ fun TodayCard(
 ) {
     val cs = MaterialTheme.colorScheme
     val nf = NumberFormat.getIntegerInstance()
-    val eaten = totals.kcal
+    // Rounded once, so "left", "eaten of" and "balance" always add up on screen
+    val eaten = Math.round(totals.kcal).toDouble()
     val share = Grading.expectedShare(dayOffset == 0, Grading.nowHour())
 
     AppCard(Modifier.fillMaxWidth()) {
@@ -63,7 +67,7 @@ fun TodayCard(
                         letterSpacing = 1.5.sp, color = cs.onSurfaceVariant
                     )
                     if (budget > 0) {
-                        val left = budget - eaten
+                        val left = Math.round(budget) - eaten
                         Text(
                             if (left >= 0) "${nf.format(left.toLong())} kcal ${if (dayOffset == 0) "left" else "under"}"
                             else "${nf.format((-left).toLong())} kcal over",
@@ -71,7 +75,7 @@ fun TodayCard(
                             color = if (left >= 0) cs.onSurface else cs.error
                         )
                         Text(
-                            "${nf.format(eaten.toLong())} eaten of ${nf.format(budget.toLong())} kcal",
+                            "${nf.format(eaten.toLong())} eaten of ${nf.format(Math.round(budget))} kcal",
                             style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant
                         )
                     } else {
@@ -84,10 +88,17 @@ fun TodayCard(
                 Spacer(Modifier.height(12.dp))
                 SlimBar((eaten / budget).toFloat(), eaten > budget)
             }
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            val dayBurn = breakdown?.dayBurnKcal?.takeIf { budget > 0 && breakdown.kcalGoal > 0 }
+            if (dayBurn != null) {
+                // One equation: what you burn today, less your plan, is what you can eat
+                EnergyWaterfall(dayBurn, breakdown!!, eaten, dayOffset == 0, onOpenBudget)
+            } else Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     burned?.let {
-                        "Burned ${nf.format(it.toLong())}" + if (eaten > 0) "  ·  balance ${"%+,.0f".format(eaten - it)} kcal" else ""
+                        // Today's burn is today's own estimate; the budget is the goal you set (see Budget)
+                        val b = Math.round(it)
+                        (if (dayOffset == 0) "Burned today ${nf.format(b)}" else "Burned ${nf.format(b)}") +
+                            if (eaten > 0) "  ·  balance ${"%+,d".format(eaten.toLong() - b)} kcal" else ""
                     } ?: "Add your details to see calories burned",
                     style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant, modifier = Modifier.weight(1f)
                 )
@@ -122,6 +133,129 @@ fun TodayCard(
             Focus(Grading.focus(report, dayOffset == 0), gradeColor(report.grade))
             extra()
         }
+    }
+}
+
+/** One step of the waterfall: a bar from [from] to [to] kcal, split into coloured [parts] (kcal each). */
+private data class Step(
+    val label: String, val value: String, val from: Long, val to: Long, val parts: List<Pair<Long, Color>>,
+    val end: Long,          // the level the next step starts from
+)
+
+/**
+ * The budget as a waterfall chart: today's burn (resting and activity), each part of the plan stepping it
+ * down or back up, and the budget with what's been eaten inside it. Every bar is on the same scale. The rows
+ * are the same as on the Budget page, so the numbers always match.
+ */
+@Composable
+private fun EnergyWaterfall(dayBurn: Double, b: com.example.nourio.plan.Budget, eatenKcal: Double, today: Boolean, onOpen: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val nf = NumberFormat.getIntegerInstance()
+    val burn = Math.round(dayBurn)
+    val goal = Math.round(b.kcalGoal)
+    val pace = Math.round(b.planChangeKcal)                       // negative while losing
+    val carry = Math.round(b.carryKcal)
+    val safety = goal - (burn + pace + carry)                     // given back by a limit
+    val activity = Math.round(b.dayActivityKcal).coerceIn(0L, burn)
+    val eaten = Math.round(eatenKcal)
+    fun signed(v: Long) = (if (v < 0) "−" else "+") + nf.format(kotlin.math.abs(v))
+
+    val restingC = cs.secondary.copy(alpha = 0.55f)
+    val activityC = cs.secondary
+    val takeC = cs.error.copy(alpha = 0.75f)
+    val giveC = Color(0xFF3DDC97).copy(alpha = 0.8f)
+    val budgetC = cs.primary.copy(alpha = 0.25f)
+    val eatenC = cs.primary
+    val overC = cs.error
+
+    // Walk the steps: each starts where the last one ended
+    val steps = buildList {
+        add(Step(if (today) "Burned today" else "Burned", nf.format(burn), 0, burn,
+            listOf(burn - activity to restingC, activity to activityC), burn))
+        var level = burn
+        fun move(label: String, delta: Long) {
+            if (delta == 0L) return
+            add(Step(label, signed(delta), minOf(level, level + delta), maxOf(level, level + delta),
+                listOf(kotlin.math.abs(delta) to if (delta < 0) takeC else giveC), level + delta))
+            level += delta
+        }
+        move(if (pace <= 0) "Your pace" else "To gain", pace)
+        move(if (carry <= 0) "Over yesterday" else "Under yesterday", carry)
+        if (b.raisedToMinimum && safety > 0) move(
+            when (b.limit) {
+                com.example.nourio.plan.BudgetLimit.DEFICIT_SHARE -> "Within 25% of burn"
+                com.example.nourio.plan.BudgetLimit.DEFICIT_CAP -> "Within 500 deficit"
+                else -> "Safe minimum"
+            }, safety)
+        // Eaten fills the budget; anything past it shows beyond the end in a stronger red
+        add(Step("Budget", nf.format(goal), 0, maxOf(goal, eaten),
+            listOf(minOf(eaten, goal) to eatenC, (goal - eaten).coerceAtLeast(0) to budgetC, (eaten - goal).coerceAtLeast(0) to overC), goal))
+    }
+    val scaleMax = maxOf(burn, goal, eaten).coerceAtLeast(1).toFloat()
+
+    val summary = steps.joinToString("; ") { "${it.label} ${it.value} kcal" } + "; ${nf.format(eaten)} eaten"
+    Column(
+        Modifier.fillMaxWidth().padding(top = 12.dp).clip(RoundedCornerShape(14.dp))
+            .background(cs.surfaceVariant.copy(alpha = 0.45f)).clickable(onClick = onOpen)
+            .semantics(mergeDescendants = true) { contentDescription = summary }
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+    ) {
+        steps.forEachIndexed { i, st ->
+            val last = i == steps.lastIndex
+            Row(Modifier.fillMaxWidth().padding(top = if (i == 0) 0.dp else 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(st.label, style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (i == 0 || last) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (last) cs.primary else cs.onSurface, modifier = Modifier.width(112.dp), maxLines = 1)
+                androidx.compose.foundation.Canvas(Modifier.weight(1f).height(if (i == 0 || last) 16.dp else 12.dp)) {
+                    val w = size.width
+                    val h = size.height
+                    // Faint track for the whole scale
+                    drawRoundRect(cs.onSurface.copy(alpha = 0.06f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(h / 2))
+                    var x = st.from / scaleMax * w
+                    st.parts.forEach { (kcal, c) ->
+                        val pw = kcal / scaleMax * w
+                        if (pw > 0f) drawRect(c, topLeft = androidx.compose.ui.geometry.Offset(x, 0f),
+                            size = androidx.compose.ui.geometry.Size(pw, h))
+                        x += pw
+                    }
+                    // Where the next step starts: a thin guide line at this step's end
+                    if (!last) {
+                        val end = st.end / scaleMax * w
+                        drawLine(cs.onSurfaceVariant.copy(alpha = 0.5f), androidx.compose.ui.geometry.Offset(end, 0f),
+                            androidx.compose.ui.geometry.Offset(end, h), strokeWidth = 1.5f)
+                    }
+                }
+                Text(st.value, style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (i == 0 || last) FontWeight.Bold else FontWeight.Normal,
+                    color = if (last) cs.primary else cs.onSurface,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.width(54.dp), maxLines = 1)
+            }
+        }
+        // Legend: a centred 2 x 2 grid, the burn's two parts on top and what's eaten and left below
+        Column(Modifier.fillMaxWidth().padding(top = 10.dp, start = 20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth()) {
+                BudgetLegendDot(restingC, "Resting ${nf.format(burn - activity)}", Modifier.weight(1f))
+                BudgetLegendDot(activityC, "Activity ${nf.format(activity)}", Modifier.weight(1f))
+            }
+            Row(Modifier.fillMaxWidth()) {
+                BudgetLegendDot(eatenC, "Eaten ${nf.format(eaten)}", Modifier.weight(1f))
+                if (eaten <= goal) BudgetLegendDot(budgetC, "Left ${nf.format(goal - eaten)}", Modifier.weight(1f))
+                else BudgetLegendDot(overC, "Over ${nf.format(eaten - goal)}", Modifier.weight(1f))
+            }
+        }
+        if (today) Text("Move more and your burn, and your budget, go up.", style = MaterialTheme.typography.bodySmall,
+            color = cs.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+    }
+}
+
+@Composable
+private fun BudgetLegendDot(color: Color, label: String, modifier: Modifier = Modifier) {
+    // Left-aligned in equal columns, so the dots line up down the grid
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+        Spacer(Modifier.width(4.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -259,7 +393,7 @@ fun MoveBodyRow(steps: Long?, activeKcal: Double?, stepGoal: Long, onOpen: () ->
     }
     BodyRow(
         "👟", "Movement", "${nf.format(steps)} steps",
-        "Goal ${nf.format(stepGoal)}" + (activeKcal?.let { "  ·  ${nf.format(it.toLong())} kcal burned by activity" } ?: ""),
+        "Goal ${nf.format(stepGoal)}" + (activeKcal?.let { "  ·  ${nf.format(Math.round(it))} kcal burned by activity" } ?: ""),
         if (steps >= stepGoal) cs.primary else cs.tertiary,
         progress = (steps.toFloat() / stepGoal).coerceIn(0f, 1f), onClick = onOpen
     )

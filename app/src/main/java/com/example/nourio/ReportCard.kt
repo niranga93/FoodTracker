@@ -86,7 +86,7 @@ object Grading {
         if (!isToday) 1.0 else ((hour - 6.0) / 15.0).coerceIn(0.15, 1.0)
 
     private val nf: NumberFormat get() = NumberFormat.getIntegerInstance()
-    private fun n(d: Double) = nf.format(d.toLong())
+    private fun n(d: Double) = nf.format(Math.round(d))
 
     /** Over a limit costs 2 points per 1% over: 10% over is a B, 25% over is an E. */
     private fun limitScore(value: Double, limit: Double) =
@@ -105,11 +105,14 @@ object Grading {
             val b = d.budgetKcal
             val r = t.kcal / b
             val score = if (d.isToday) limitScore(t.kcal, b) else max(0.0, 1.0 - kotlin.math.abs(r - 1.0) * 2.0)
+            // Rounded first, so these match the "eaten of" and "left" figures on Home
+            val eatenR = Math.round(t.kcal).toDouble()
+            val budgetR = Math.round(b).toDouble()
             val comment = when {
-                t.kcal > b -> "${n(t.kcal - b)} kcal over budget. A lighter next meal or a walk will balance it."
-                d.isToday -> "${n(b - t.kcal)} kcal left for today."
+                eatenR > budgetR -> "${n(eatenR - budgetR)} kcal over budget. A lighter next meal or a walk will balance it."
+                d.isToday -> "${n(budgetR - eatenR)} kcal left for today."
                 r >= 0.95 -> "Right on budget."
-                else -> "${n(b - t.kcal)} kcal under budget. Eating far too little can backfire."
+                else -> "${n(budgetR - eatenR)} kcal under budget. Eating far too little can backfire."
             }
             out += Subject(SubjectKind.CALORIES, "Calories", "${n(t.kcal)} of ${n(b)} kcal", score, comment)
         }

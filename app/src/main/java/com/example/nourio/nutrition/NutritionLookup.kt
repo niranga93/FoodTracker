@@ -13,7 +13,7 @@ import android.util.Log
 
 object NutritionLookup {
     private val pinner = CertificatePinner.Builder()
-        .add("api.nal.usda.gov", "sha256/Y9m3pBnn822fN8k+e4lM07Jm08e063k3N/218r24k08=")
+        .apply { LetsEncryptPins.ROOTS.forEach { add("api.nal.usda.gov", it) } }
         .build()
 
     private val client = OkHttpClient.Builder()
@@ -78,11 +78,23 @@ object NutritionLookup {
 
     /** Top results for a typed food name, per 100 g. Blocking: call from Dispatchers.IO. */
     fun searchMany(term: String, limit: Int = 10): List<Per100g> {
+        // Plain foods first ("Bananas, raw"), then branded products to fill the list. Without the filter,
+        // the hundreds of thousands of branded entries push the basic food off the list.
+        val generic = runCatching { searchType(term, limit, "Foundation,SR Legacy") }.getOrDefault(emptyList())
+        if (generic.size >= limit) return generic
+        val branded = runCatching { searchType(term, limit, null) }
+            .getOrElse { if (generic.isEmpty()) throw it else emptyList() }
+        val seen = generic.map { it.description.lowercase() }.toMutableSet()
+        return (generic + branded.filter { seen.add(it.description.lowercase()) }).take(limit)
+    }
+
+    private fun searchType(term: String, limit: Int, dataType: String?): List<Per100g> {
         val url = HttpUrl.Builder()
             .scheme("https").host("api.nal.usda.gov")
             .addPathSegments("fdc/v1/foods/search")
             .addQueryParameter("query", term)
             .addQueryParameter("pageSize", limit.toString())
+            .apply { if (dataType != null) addQueryParameter("dataType", dataType) }
             .addQueryParameter("api_key", BuildConfig.USDA_API_KEY)
             .build()
         val foods = JSONObject(getWithRetry(url)).optJSONArray("foods") ?: return emptyList()

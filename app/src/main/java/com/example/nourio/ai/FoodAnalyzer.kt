@@ -105,7 +105,9 @@ alcohol, honey. Use an empty list if none apply.
     suspend fun analyze(file: File): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             AiConsent.require(AiUse.PHOTO)          // never sent without the user's consent
-            Llm.complete(LlmRequest(null, listOf(LlmTurn("user", PHOTO_INTRO + RULES, encodeImage(file))), RESPONSE_SCHEMA))
+            val image = encodeImage(file)
+            AiProgress.stage(AiStage.ASKING)
+            Llm.complete(LlmRequest(null, listOf(LlmTurn("user", PHOTO_INTRO + RULES, image)), RESPONSE_SCHEMA))
         }
     }
 
@@ -121,7 +123,9 @@ alcohol, honey. Use an empty list if none apply.
     suspend fun askText(system: String, user: String, use: AiUse = AiUse.COACH): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             AiConsent.require(use)
+            AiProgress.begin(AiStage.ASKING)
             Llm.complete(LlmRequest(system, listOf(LlmTurn("user", user)), temperature = 0.4, maxTokens = 1024))
+                .also { AiProgress.end() }
         }
     }
 
@@ -130,7 +134,9 @@ alcohol, honey. Use an empty list if none apply.
         withContext(Dispatchers.IO) {
             runCatching {
                 AiConsent.require(use)
+                AiProgress.begin(AiStage.ASKING)
                 Llm.complete(LlmRequest(system, turns.map { (role, text) -> LlmTurn(role, text) }, schema, temperature = 0.2))
+                    .also { AiProgress.end() }
             }
         }
 

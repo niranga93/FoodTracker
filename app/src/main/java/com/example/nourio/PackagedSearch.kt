@@ -78,8 +78,10 @@ fun PackagedPane(modifier: Modifier, onItem: (FoodItem?) -> Unit) {
         onItem(if (p != null && g > 0) p.item.copy(grams = g) else null)
     }
 
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     fun runSearch() {
         if (query.isBlank()) return
+        keyboard?.hide()   // otherwise the keyboard covers the results
         searching = true
         error = null
         picked = null

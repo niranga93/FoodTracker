@@ -46,6 +46,29 @@ class AiConsentTest {
         AiConsent.set(ctx, AiUse.PHOTO, false)
         assertFalse(AiConsent.isGranted(ctx, AiUse.PHOTO))
     }
+
+    @Test
+    fun alwaysAllowCoversEveryUse() {
+        AiConsent.setAll(ctx, true)
+        AiUse.entries.forEach { assertTrue(it.name, AiConsent.isGranted(ctx, it)) }
+    }
+
+    @Test
+    fun turningAlwaysAllowOffWithdrawsEverything() {
+        AiConsent.set(ctx, AiUse.PHOTO, true)
+        AiConsent.setAll(ctx, true)
+        AiConsent.setAll(ctx, false)
+        AiUse.entries.forEach { assertFalse(it.name, AiConsent.isGranted(ctx, it)) }
+    }
+
+    @Test
+    fun switchingOneOffKeepsTheOthers() {
+        AiConsent.setAll(ctx, true)
+        AiConsent.set(ctx, AiUse.COACH, false)
+        assertFalse(AiConsent.isAllGranted(ctx))
+        assertFalse(AiConsent.isGranted(ctx, AiUse.COACH))
+        AiUse.entries.filter { it != AiUse.COACH }.forEach { assertTrue(it.name, AiConsent.isGranted(ctx, it)) }
+    }
 }
 
 /** A fresh process, so the one-time read of the old coach consent happens with it already set. */

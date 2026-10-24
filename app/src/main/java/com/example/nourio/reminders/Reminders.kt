@@ -229,8 +229,24 @@ object Reminders {
                 com.example.nourio.insights.InsightGoals.current(context), today
             ).tips
         }.getOrDefault(emptyList())
+        // Body-model tips: from the forecast's model of fat, lean tissue and water, corrected by the weigh-ins
+        val bodyTips = runCatching {
+            com.example.nourio.energy.EnergyRepo.init(context)
+            val body = com.example.nourio.energy.EnergyRepo.body(com.example.nourio.data.ProfileStore(context).load()).first
+            body?.let { b ->
+                val r = kotlinx.coroutines.runBlocking { com.example.nourio.loadForecast(context, db, b) }
+                BodyTips.signals(r)?.let { BodyTips.tips(it) }
+            }.orEmpty()
+        }.getOrDefault(emptyList())
+        val sentPrefs = context.getSharedPreferences("reminders_sent", Context.MODE_PRIVATE)
+        // Urgent ones (a water jump on the scale, losing too fast) come before patterns, at most every 3 days each
+        val urgent = bodyTips.filter { it.urgent }.maxByOrNull { it.score }
+            ?.takeIf { now - sentPrefs.getLong("body_${it.id}", 0L) > 3 * 86_400_000L }
         val pattern = insight.open(tips).firstOrNull { now - insight.lastNotified(it.id) > 3 * 86_400_000L }
-        if (pattern != null) {
+        if (urgent != null) {
+            notify(context, Message(today.toEpochDay(), urgent.title, urgent.body, "weight", NotificationChannels.TIPS, private = true))
+            sentPrefs.edit { putLong("body_${urgent.id}", now).putString("tip_last", urgent.id) }
+        } else if (pattern != null) {
             com.example.nourio.insights.InsightWorker.notify(context, pattern)
             insight.markNotified(pattern.id)
         } else {
@@ -247,7 +263,7 @@ object Reminders {
                 )
             }
             val lastId = context.getSharedPreferences("reminders_sent", Context.MODE_PRIVATE).getString("tip_last", null)
-            val tip = DailyTip.pick(days, GoalStore(context).load(), water.goalMl, today.dayOfYear, lastId)
+            val tip = DailyTip.pick(days, GoalStore(context).load(), water.goalMl, today.dayOfYear, lastId, bodyTips)
             notify(context, Message(today.toEpochDay(), tip.title, tip.body, "home", NotificationChannels.TIPS, private = true))
             context.getSharedPreferences("reminders_sent", Context.MODE_PRIVATE).edit { putString("tip_last", tip.id) }
         }

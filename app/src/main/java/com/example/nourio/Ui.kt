@@ -75,9 +75,12 @@ fun LegendDot(color: Color, label: String) {
 @Composable
 fun Expandable(label: String = "Details", content: @Composable ColumnScope.() -> Unit) {
     var open by remember { mutableStateOf(false) }
-    Column {
-        TextButton(onClick = { open = !open }, contentPadding = PaddingValues(0.dp)) {
-            Text(if (open) "Hide" else label)
+    Column(Modifier.fillMaxWidth()) {
+        // The link is centred, like the other card actions; what it opens reads left-aligned
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            TextButton(onClick = { open = !open }) {
+                Text(if (open) "Hide" else label)
+            }
         }
         if (open) Column(verticalArrangement = Arrangement.spacedBy(2.dp), content = content)
     }

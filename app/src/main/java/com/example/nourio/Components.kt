@@ -50,7 +50,7 @@ import java.util.Locale
 fun Double.f0(): String = "%.0f".format(this)
 fun Double.f1(): String = "%.1f".format(this)
 
-private fun dayStart(offset: Int): Long = Calendar.getInstance().apply {
+internal fun dayStart(offset: Int): Long = Calendar.getInstance().apply {
     set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
     set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
     add(Calendar.DAY_OF_YEAR, offset)

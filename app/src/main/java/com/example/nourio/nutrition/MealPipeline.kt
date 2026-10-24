@@ -22,6 +22,7 @@ object MealPipeline {
     /** Photo meals also apply portion sizes learned from your past corrections. */
     suspend fun run(file: File): Result<Analysis> = withContext(Dispatchers.IO) {
         runCatching {
+            com.example.nourio.ai.AiProgress.begin()
             build(FoodAnalyzer.analyze(file).getOrThrow(), "No food detected in the photo", learned = true)
         }
     }
@@ -32,7 +33,9 @@ object MealPipeline {
      */
     suspend fun runText(description: String): Result<Analysis> = withContext(Dispatchers.IO) {
         runCatching {
+            com.example.nourio.ai.AiProgress.begin()
             val content = RecipeFetcher.expand(description)
+            com.example.nourio.ai.AiProgress.stage(com.example.nourio.ai.AiStage.ASKING)
             build(FoodAnalyzer.analyzeText(content).getOrThrow(), "No food found in that description", learned = false)
         }
     }
@@ -43,11 +46,18 @@ object MealPipeline {
         if (arr.length() == 0) error(emptyMessage)
 
         // Look up all items at once; each lookup is a blocking network call
+        val progress = com.example.nourio.ai.AiProgress
+        progress.stage(com.example.nourio.ai.AiStage.NUTRITION)
+        val done = java.util.concurrent.atomic.AtomicInteger(0)
+        progress.foods(0, arr.length())
         val items = coroutineScope {
             (0 until arr.length()).map { i ->
-                async(Dispatchers.IO) { toFoodItem(arr.getJSONObject(i), learned) }
+                async(Dispatchers.IO) {
+                    toFoodItem(arr.getJSONObject(i), learned).also { progress.foods(done.incrementAndGet(), arr.length()) }
+                }
             }.awaitAll()
         }
+        progress.stage(com.example.nourio.ai.AiStage.DONE)
         return Analysis(json.optString("meal_description", "Meal"), items)
     }
 

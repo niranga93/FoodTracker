@@ -109,16 +109,22 @@ private fun StagesBar(s: SleepStages) {
         parts.forEach { (_, m, c) -> Box(Modifier.weight(m.toFloat() / total).fillMaxHeight().background(c)) }
     }
     Spacer(Modifier.height(8.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        parts.forEach { (label, m, c) ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(c))
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    "$label ${hm(m).removePrefix("0h ")}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+    // Two per row in equal columns, so the labels never run into each other
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        parts.chunked(2).forEach { pair ->
+            Row(Modifier.fillMaxWidth()) {
+                pair.forEach { (label, m, c) ->
+                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(c))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "$label ${hm(m).removePrefix("0h ")}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
             }
         }
     }

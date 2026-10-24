@@ -98,7 +98,16 @@ fun ProfileHub(db: MealDb, onOpenPage: (String) -> Unit, inner: PaddingValues) {
 
         val journey = plan.targetKg > 0 && weights.isNotEmpty()
         if (journey) {
-            JourneyCard(weights.first().kg, weightNow, plan.targetKg, plan.paceKgPerWeek) { onOpenPage("goals") }
+            // The estimated line needs a full profile (for calories burned) and reads months of meals: load it off screen
+            val (body, missing) = remember(refresh) { com.example.nourio.energy.EnergyRepo.body(profile) }
+            // (finished loading, series)
+            val journeyData by produceState<Pair<Boolean, com.example.nourio.energy.JourneySeries?>>(false to null, refresh, body) {
+                value = true to body?.let { b -> runCatching { com.example.nourio.energy.JourneyModel.load(context, db, b) }.getOrNull() }
+            }
+            JourneyCard(
+                weights.first().kg, weightNow, plan.targetKg, plan.paceKgPerWeek,
+                series = journeyData.second, loading = body != null && !journeyData.first, missing = missing,
+            ) { onOpenPage("goals") }
         }
 
         Section("Health") {
@@ -129,11 +138,13 @@ fun ProfileHub(db: MealDb, onOpenPage: (String) -> Unit, inner: PaddingValues) {
         }
 
         Section("Your plan") {
-            // Personal details are the pencil on the header; calories and target are shown above,
-            // so the goals row lists the nutrient goals instead
+            // Personal details are the pencil on the header; the goals row leads with the target weight
             IconRow(
                 Icons.Filled.Star, Amber, "Goals & target",
                 listOfNotNull(
+                    plan.targetKg.takeIf { it > 0 }?.let {
+                        "target ${it.f1()} kg at ${"%.2f".format(plan.paceKgPerWeek).trimEnd('0').trimEnd('.')} kg a week"
+                    },
                     goals.protein.takeIf { it > 0 }?.let { "protein ${it.f0()} g" },
                     goals.fiber.takeIf { it > 0 }?.let { "fiber ${it.f0()} g" },
                     goals.addedSugar.takeIf { it > 0 }?.let { "added sugar ≤ ${it.f0()} g" },
@@ -143,7 +154,13 @@ fun ProfileHub(db: MealDb, onOpenPage: (String) -> Unit, inner: PaddingValues) {
             IconRow(
                 Icons.Filled.Warning, MaterialTheme.colorScheme.secondary, "Diet & allergies",
                 (diet.diets.size + diet.allergens.size + diet.other.size).let {
-                    if (it == 0) "None set" else "$it selected"
+                    when {
+                        it > 0 -> "$it selected"
+                        diet.noDiet && diet.noAllergies -> "No diet or allergies"
+                        diet.noDiet -> "No dietary requirements"
+                        diet.noAllergies -> "No allergies"
+                        else -> "None set"
+                    }
                 }
             ) { onOpenPage("diet") }
         }
@@ -280,64 +297,6 @@ private fun HeroStat(label: String, value: String, note: String?, modifier: Modi
         }
     }
 }
-
-/** Start → now → target, with how far along you are. */
-@Composable
-private fun JourneyCard(start: Double, now: Double, target: Double, pace: Double, onClick: () -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    val total = start - target
-    val progress = if (abs(total) < 0.05) 1f else ((start - now) / total).toFloat().coerceIn(0f, 1f)
-    val toGo = abs(now - target)
-    val weeks = if (pace > 0 && toGo >= 0.1) ceil(toGo / pace).toInt() else null
-    AppCard(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Column(Modifier.padding(20.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "Journey to ${target.f1()} kg",
-                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
-                )
-                Pill("${(progress * 100).toInt()}%")
-            }
-            Spacer(Modifier.height(14.dp))
-            Box(Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(7.dp)).background(cs.surfaceVariant)) {
-                Box(
-                    Modifier.fillMaxWidth(progress.coerceAtLeast(0.03f)).fillMaxHeight()
-                        .clip(RoundedCornerShape(7.dp))
-                        .background(Brush.horizontalGradient(listOf(cs.tertiary, cs.primary)))
-                )
-            }
-            Spacer(Modifier.height(10.dp))
-            Row(Modifier.fillMaxWidth()) {
-                JourneyPoint("Start", start, Alignment.Start, Modifier.weight(1f))
-                JourneyPoint("Now", now, Alignment.CenterHorizontally, Modifier.weight(1f))
-                JourneyPoint("Target", target, Alignment.End, Modifier.weight(1f))
-            }
-            // Moving away from the target since the first weigh-in: say so kindly instead of a bare 0%
-            val away = abs(now - target) > abs(start - target) + 0.05
-            Text(
-                when {
-                    toGo < 0.1 -> "You've reached your target. Nice work."
-                    away -> "${abs(now - start).f1()} kg ${if (now > start) "up" else "down"} since your first weigh-in. " +
-                        "Day-to-day changes are normal; the trend is what counts. ${toGo.f1()} kg to go."
-                    else -> "${toGo.f1()} kg to go" + (weeks?.let { "  ·  about $it ${if (it == 1) "week" else "weeks"} at your pace" } ?: "")
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = cs.onSurfaceVariant,
-                modifier = Modifier.padding(top = 10.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun JourneyPoint(label: String, kg: Double, align: Alignment.Horizontal, modifier: Modifier) {
-    Column(modifier, horizontalAlignment = align) {
-        Text("${kg.f1()} kg", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
 
 @Composable
 private fun IconBadge(icon: ImageVector, tint: Color) {

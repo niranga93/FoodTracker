@@ -229,7 +229,7 @@ private fun OverviewCard(a: Analysis, notify: Boolean, onNotify: (Boolean) -> Un
 
 @Composable
 private fun Big(value: String, label: String, color: Color, modifier: Modifier) {
-    Column(modifier) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = color)
         Muted(label)
     }

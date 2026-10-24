@@ -26,3 +26,6 @@ release/store/screenshots/raw-render/
 release-*/*.aab
 release-*/*.apk
 release-*/mapping-*.txt
+
+# Kotlin compiler cache
+.kotlin/

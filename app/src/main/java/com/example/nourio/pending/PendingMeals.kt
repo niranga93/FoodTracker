@@ -22,14 +22,20 @@ import java.util.Calendar
 
 enum class PendingStatus { WAITING, READY, FAILED }
 
-/** A meal photo taken offline, waiting for analysis or for the user to review it. */
+/**
+ * A meal waiting for analysis: a photo taken offline, or a photo or description whose analysis took too long
+ * on screen and moved to the background. [autoSave] meals go straight into the log once analyzed; the others
+ * wait for the user to review them.
+ */
 data class PendingMeal(
     val id: Long,
-    val photo: File,
+    val photo: File?,               // null for a typed or spoken description
     val mealTs: Long,               // when the meal is logged for
     val status: PendingStatus,
     val error: String? = null,
-    val analysis: Analysis? = null
+    val analysis: Analysis? = null,
+    val text: String? = null,       // the description, when there's no photo
+    val autoSave: Boolean = false,
 ) {
     val label: String get() = mealLabel(mealTs)
 }
@@ -66,23 +72,35 @@ object PendingMeals {
     private fun photoFile(context: Context, id: Long) = File(dir(context), "$id.jpg")
 
     /** Moves [photo] into the queue. */
-    fun add(context: Context, photo: File, mealTs: Long): PendingMeal {
+    fun add(context: Context, photo: File, mealTs: Long, autoSave: Boolean = false): PendingMeal {
         val id = System.currentTimeMillis()
         val dest = photoFile(context, id)
         if (!photo.renameTo(dest)) {
             photo.copyTo(dest, overwrite = true)
             photo.delete()
         }
-        val p = PendingMeal(id, dest, mealTs, PendingStatus.WAITING)
+        val p = PendingMeal(id, dest, mealTs, PendingStatus.WAITING, autoSave = autoSave)
         write(context, p)
         return p
+    }
+
+    /** Queues a typed or spoken description. */
+    fun addText(context: Context, text: String, mealTs: Long, autoSave: Boolean = true): PendingMeal {
+        val p = PendingMeal(System.currentTimeMillis(), null, mealTs, PendingStatus.WAITING, text = text, autoSave = autoSave)
+        write(context, p)
+        return p
+    }
+
+    /** Puts a meal back in the queue to be analyzed in the background and added to the log. */
+    fun requeue(context: Context, id: Long, autoSave: Boolean = true) {
+        get(context, id)?.let { write(context, it.copy(status = PendingStatus.WAITING, error = null, autoSave = autoSave)) }
     }
 
     @Synchronized
     fun all(context: Context): List<PendingMeal> =
         dir(context).listFiles { f -> f.name.endsWith(".json") }.orEmpty()
             .mapNotNull { runCatching { read(context, JSONObject(it.readText())) }.getOrNull() }
-            .filter { it.photo.exists() }
+            .filter { it.photo?.exists() == true || it.text != null }
             .sortedBy { it.mealTs }
 
     fun get(context: Context, id: Long): PendingMeal? = all(context).firstOrNull { it.id == id }
@@ -111,6 +129,8 @@ object PendingMeals {
             .put("mealTs", p.mealTs)
             .put("status", p.status.name)
             .put("error", p.error ?: JSONObject.NULL)
+            .put("text", p.text ?: JSONObject.NULL)
+            .put("autoSave", p.autoSave)
         p.analysis?.let { a ->
             o.put("description", a.description)
             o.put("items", JSONArray().apply { a.items.forEach { put(itemToJson(it)) } })
@@ -130,13 +150,16 @@ object PendingMeals {
                 (0 until arr.length()).map { itemFromJson(arr.getJSONObject(it)) }
             )
         }
+        val text = if (o.isNull("text")) null else o.optString("text").takeIf { it.isNotBlank() }
         return PendingMeal(
             id = id,
-            photo = photoFile(context, id),
+            photo = if (text != null) null else photoFile(context, id),
             mealTs = o.getLong("mealTs"),
             status = PendingStatus.valueOf(o.getString("status")),
             error = if (o.isNull("error")) null else o.getString("error"),
-            analysis = analysis
+            analysis = analysis,
+            text = text,
+            autoSave = o.optBoolean("autoSave", false),
         )
     }
 

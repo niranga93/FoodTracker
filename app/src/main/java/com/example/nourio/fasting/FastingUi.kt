@@ -91,9 +91,9 @@ private fun Note(text: String, color: Color) {
     Row(
         Modifier.fillMaxWidth().padding(top = 14.dp).clip(RoundedCornerShape(14.dp))
             .background(color.copy(alpha = 0.12f)).padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.Top
     ) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+        Box(Modifier.padding(top = 7.dp).size(8.dp).clip(CircleShape).background(color))
         Spacer(Modifier.width(10.dp))
         Text(text, style = MaterialTheme.typography.bodyMedium)
     }

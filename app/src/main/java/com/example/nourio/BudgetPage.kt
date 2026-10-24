@@ -63,7 +63,7 @@ private fun Step(label: String, amount: String, explain: String?, bold: Boolean 
 /** Where the daily goal comes from, in plain words. */
 private fun goalExplanation(b: Budget, plan: PlanStore): String {
     val g = b.plan ?: return "The calorie goal you set in Goals & target."
-    val maintain = "Your body uses about ${kcal(g.maintenance)} a day"
+    val maintain = "On average your body uses about ${kcal(g.maintenance)} a day (your last 14 days)"
     val pace = "%.2f".format(plan.paceKgPerWeek).trimEnd('0').trimEnd('.')
     val toward = "toward your target of ${"%.1f".format(plan.targetKg)} kg"
     val eta = g.etaWeeks?.let { w -> " At this pace you'd get there in about ${w.roundToLong().coerceAtLeast(1)} weeks." } ?: ""
@@ -72,6 +72,16 @@ private fun goalExplanation(b: Budget, plan: PlanStore): String {
         g.dailyChange < 0 -> "$maintain. Eating ${kcal(-g.dailyChange)} less than that loses about $pace kg a week $toward.$eta"
         else -> "$maintain. Eating ${kcal(g.dailyChange)} more than that gains about $pace kg a week $toward.$eta"
     } + if (g.clamped) " The pace was slowed so your goal stays at a safe minimum." else ""
+}
+
+/** Yesterday in numbers: what its own burn allowed at your pace, what was eaten, and half the difference. */
+private fun yesterdayExplanation(b: Budget, carryOn: Boolean): String {
+    if (!carryOn || b.carryNote != null || abs(b.carryKcal) < 1 || b.yesterdayBurnKcal == null) return carryExplanation(b, carryOn)
+    val diff = b.yesterdayEatenKcal - b.yesterdayTargetKcal
+    val start = "Yesterday you burned ${kcal(b.yesterdayBurnKcal)}, so at your pace you could eat ${kcal(b.yesterdayTargetKcal)}. " +
+        "You ate ${kcal(b.yesterdayEatenKcal)}"
+    return if (diff > 0) "$start, ${kcal(diff)} over, so half of that comes off today (up to 300 kcal)."
+    else "$start, ${kcal(-diff)} under, so half of that is added today (up to 300 kcal)."
 }
 
 private fun carryExplanation(b: Budget, carryOn: Boolean): String = when {
@@ -134,11 +144,45 @@ fun BudgetPage(db: MealDb, goalStore: GoalStore, dayOffset: Int) {
 
     // 2. How it's worked out
     WidgetCard("How it's worked out") {
-        Step("Your daily goal", kcal(b.baseKcal), goalExplanation(b, plan))
-        HorizontalDivider()
-        Step("From yesterday", if (abs(b.carryKcal) >= 1) signedKcal(b.carryKcal) else "0 kcal", carryExplanation(b, plan.carryOver))
-        HorizontalDivider()
-        Step(if (today) "Today's budget" else "That day's budget", kcal(b.kcalGoal), null, bold = true)
+        val dayBurn = b.dayBurnKcal
+        if (dayBurn != null) {
+            // The same rows as the Home equation: burn, the pace, yesterday, and the safe minimum
+            val activity = Math.round(b.dayActivityKcal).coerceIn(0L, Math.round(dayBurn))
+            val resting = Math.round(dayBurn) - activity
+            Step(if (today) "Burned today" else "Burned that day", kcal(dayBurn),
+                "Resting ${kcal(resting.toDouble())} + activity ${kcal(activity.toDouble())}" +
+                    if (today) " so far, from Health Connect. It grows as you move." else ", from Health Connect.")
+            HorizontalDivider()
+            Text("Your plan", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp))
+            Step("For your pace", signedKcal(b.planChangeKcal), goalExplanation(b, plan) +
+                " On an average day that makes a goal of ${kcal(b.baseKcal)}.")
+            HorizontalDivider()
+            Step("From yesterday", if (abs(b.carryKcal) >= 1) signedKcal(b.carryKcal) else "0 kcal", yesterdayExplanation(b, plan.carryOver))
+            HorizontalDivider()
+            val safety = Math.round(b.kcalGoal) - (Math.round(dayBurn) + Math.round(b.planChangeKcal) + Math.round(b.carryKcal))
+            if (b.raisedToMinimum && safety > 0) {
+                val (title, why) = when (b.limit) {
+                    com.example.nourio.plan.BudgetLimit.DEFICIT_SHARE -> "Within 25% of your burn" to
+                        "A day's deficit is kept within 25% of what you burn that day. Bigger deficits cost more muscle, " +
+                        "especially for smaller and leaner people."
+                    com.example.nourio.plan.BudgetLimit.DEFICIT_CAP -> "Within a 500 kcal deficit" to
+                        "A day's deficit is kept under 500 kcal: in studies, bigger deficits cost muscle even with strength training."
+                    else -> "Safe minimum" to
+                        "While losing weight your budget doesn't go below the common safe minimum for dieting without a doctor " +
+                        "(1,500 kcal for men, 1,200 for women)."
+                }
+                Step(title, signedKcal(safety.toDouble()), "$why So this much is given back today. On a more active day more of the plan applies.")
+                HorizontalDivider()
+            }
+        } else {
+            Step("Your daily goal", kcal(b.baseKcal), goalExplanation(b, plan))
+            HorizontalDivider()
+            Step("From yesterday", if (abs(b.carryKcal) >= 1) signedKcal(b.carryKcal) else "0 kcal", carryExplanation(b, plan.carryOver))
+            HorizontalDivider()
+        }
+        Step(if (today) "Today's budget" else "That day's budget", kcal(b.kcalGoal),
+            null, bold = true)
         b.planMessage?.let { Muted(it, Modifier.padding(top = 6.dp), error = true) }
     }
 
@@ -171,17 +215,13 @@ fun BudgetPage(db: MealDb, goalStore: GoalStore, dayOffset: Int) {
             Muted("Log full days of meals and you'll see how you're doing against your goal here.")
         } else {
             val days7 = if (a7.days == 1) "1 day" else "${a7.days} days"
+            // Each day's budget follows that day's burn, so the week is shown against what was burned
             Text(
                 "Last 7 days ($days7 logged): " +
-                    if (a7.underGoal >= 0) "${kcal(a7.underGoal)} under your goal in total."
-                    else "${kcal(-a7.underGoal)} over your goal in total.",
+                    (if (a7.balance <= 0) "you burned ${kcal(-a7.balance)} more than you ate"
+                    else "you ate ${kcal(a7.balance)} more than you burned") +
+                    ", roughly ${"%.1f".format(abs(a7.kg))} kg of body weight.",
                 style = MaterialTheme.typography.bodyMedium
-            )
-            Muted(
-                (if (a7.balance <= 0) "You burned ${kcal(-a7.balance)} more than you ate"
-                else "You ate ${kcal(a7.balance)} more than you burned") +
-                    ", which is roughly ${"%.1f".format(abs(a7.kg))} kg of body weight.",
-                Modifier.padding(top = 4.dp)
             )
             val a30 = b.agg30
             if (a30.days > a7.days) {

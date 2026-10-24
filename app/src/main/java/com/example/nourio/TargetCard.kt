@@ -31,8 +31,10 @@ import kotlin.math.abs
 
 /** With [autoSave] (the setup guide) changes are saved as you type and when the card closes. */
 @Composable
-fun TargetCard(autoSave: Boolean = false) {
+fun TargetCard(autoSave: Boolean = false, db: com.example.nourio.data.MealDb? = null, goalStore: com.example.nourio.data.GoalStore? = null) {
     val context = LocalContext.current
+    // The weeks estimate uses the same calculation as the budget, so it includes the daily deficit limits
+    val budget = if (db != null && goalStore != null) rememberBudget(db, goalStore, 0).value else null
     val plan = remember { PlanStore(context) }
     var target by remember {
         mutableStateOf(
@@ -82,17 +84,25 @@ fun TargetCard(autoSave: Boolean = false) {
                     label = { Text("Steady 0.5 kg/wk") })
             }
 
-            val cur = remember { ProfileStore(context).load().weightKg }
+            val profile = remember { ProfileStore(context).load() }
+            val cur = profile.weightKg
             val t = target.replace(',', '.').toDoubleOrNull() ?: 0.0
             if (t > 0 && cur > 0) {
                 val delta = t - cur
-                val effective = minOf(pace, BudgetModel.MAX_PACE_KG_WEEK, cur * 0.01)
-                Text(
-                    if (abs(delta) < 0.5) "Maintains your weight."
-                    else "About ${(abs(delta) / effective).toInt()} weeks at this pace.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                val body = remember(profile) { com.example.nourio.energy.EnergyRepo.body(profile).first }
+                val text = when {
+                    abs(delta) < 0.5 -> "Maintains your weight."
+                    body != null -> {
+                        val maintenance = budget?.maintenanceKcal?.takeIf { it > 0 }
+                            ?: com.example.nourio.energy.EnergyModel.estimateBurn(body, null, null, null).burned
+                        val g = BudgetModel.baseGoal(body, maintenance, t, pace)
+                        val weeks = g.etaWeeks?.let { "About ${Math.round(it).coerceAtLeast(1)} weeks at this pace." } ?: ""
+                        weeks + if (g.clamped) " The pace is limited so a day's deficit stays within a safe size " +
+                            "(25% of what you burn, and no more than 500 kcal)." else ""
+                    }
+                    else -> "About ${(abs(delta) / minOf(pace, BudgetModel.MAX_PACE_KG_WEEK, cur * 0.01)).toInt()} weeks at this pace."
+                }
+                Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             error?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)

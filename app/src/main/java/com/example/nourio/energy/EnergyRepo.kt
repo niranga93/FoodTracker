@@ -110,7 +110,8 @@ object EnergyRepo {
         val steps = act?.steps?.takeIf { it > 0 }
         val active = act?.activeKcal?.takeIf { it > 0 }
         val total = act?.totalKcal?.takeIf { it > 0 }
-        val est = EnergyModel.estimateBurn(body, steps, active, total, act?.distanceKm?.takeIf { it > 0 })
+        // Today's digestion follows what's eaten so far only once the day is logged; until then a typical day is assumed
+        val est = EnergyModel.estimateBurn(body, steps, active, total, act?.distanceKm?.takeIf { it > 0 }, eaten.takeIf { offset < 0 })
         return DayEnergy(
             offset = offset,
             eaten = eaten,
@@ -118,7 +119,8 @@ object EnergyRepo {
             source = est.source,
             steps = steps,
             logComplete = offset < 0 && eaten >= EnergyModel.MIN_LOGGED_KCAL,
-            resting = est.resting
+            resting = est.resting,
+            shownActivity = est.shownActivity,
         )
     }
 }

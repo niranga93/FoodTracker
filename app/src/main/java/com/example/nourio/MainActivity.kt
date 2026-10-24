@@ -72,6 +72,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -224,6 +226,9 @@ class MainActivity : ComponentActivity() {
     private fun openPendingFrom(intent: Intent?) {
         val id = intent?.getLongExtra(AnalyzePendingWorker.EXTRA_PENDING_ID, -1L) ?: -1L
         if (id > 0) nav.open(Screen.ReviewPending(id))
+        // From "Added your lunch to your log": open that meal to check or change it
+        val mealId = intent?.getLongExtra(AnalyzePendingWorker.EXTRA_MEAL_ID, -1L) ?: -1L
+        if (mealId > 0) nav.open(Screen.EditMeal(mealId))
         // From the daily tip notification. Only this page is allowed, since other apps can start this activity.
         when (intent?.getStringExtra(com.example.nourio.insights.InsightWorker.EXTRA_OPEN_PAGE)) {
             "insights" -> nav.open(Screen.Page("insights"))
@@ -425,7 +430,7 @@ fun FoodApp(nav: NavViewModel = viewModel()) {
                 } else {
                     ReviewScreen(
                         file = p.photo,
-                        text = null,
+                        text = p.text,
                         db = db,
                         initialOffset = dayOffsetOf(p.mealTs),
                         onBack = nav::back,
@@ -545,6 +550,8 @@ fun AddFab(
     Box {
         ExtendedFloatingActionButton(
             onClick = { open = true },
+            // Screen readers didn't get the button's label, so name it explicitly
+            modifier = Modifier.semantics { contentDescription = "Add meal" },
             icon = { Icon(Icons.Filled.Add, contentDescription = null) },
             text = { Text("Add meal") },
             containerColor = MaterialTheme.colorScheme.primary,
@@ -664,6 +671,7 @@ fun CameraScreen(onBack: () -> Unit, onGallery: () -> Unit, onCaptured: (File) -
                 .padding(8.dp)
                 .clip(CircleShape)
                 .background(Color.White)
+                .semantics { contentDescription = "Take photo" }
                 .clickable {
                     val file = File(context.cacheDir, "meal_${System.currentTimeMillis()}.jpg")
                     imageCapture.takePicture(
@@ -675,6 +683,7 @@ fun CameraScreen(onBack: () -> Unit, onGallery: () -> Unit, onCaptured: (File) -
 
                             override fun onError(e: ImageCaptureException) {
                                 Log.e("Camera", "Capture failed", e)
+                                Toast.makeText(context, "Couldn't take the photo. Try again, or pick one from the gallery.", Toast.LENGTH_SHORT).show()
                             }
                         }
                     )
@@ -855,8 +864,42 @@ fun ReviewScreen(
         }
     }
 
+    // Over 30 s: finish in the background and add it to the log automatically, so nobody waits on this screen
+    fun finishInBackground() {
+        vm.cancelForBackground()
+        val ts = if (pending != null) pending.mealTs else timestampForOffset(logOffset)
+        when {
+            pending != null -> PendingMeals.requeue(context, pending.id)
+            file != null -> PendingMeals.add(context, file, ts, autoSave = true)
+            !text.isNullOrBlank() -> PendingMeals.addText(context, text, ts)
+            else -> return
+        }
+        AnalyzePendingWorker.enqueue(context)
+        Toast.makeText(
+            context, "This is taking a while, so Nourio will finish it in the background and add it to your log. " +
+                "You'll get a notification.", Toast.LENGTH_LONG
+        ).show()
+        onBack()
+    }
+    LaunchedEffect(state.slow) { if (state.slow) finishInBackground() }
+
+    // An analysis that hasn't been saved would be lost on Back, so ask first
+    var confirmLeave by remember { mutableStateOf(false) }
+    val unsaved = !state.isLoading && state.items.isNotEmpty()
+    fun leave() { if (unsaved) confirmLeave = true else onBack() }
+    BackHandler(enabled = unsaved) { confirmLeave = true }
+    if (confirmLeave) {
+        AlertDialog(
+            onDismissRequest = { confirmLeave = false },
+            title = { Text("Discard this meal?") },
+            text = { Text("The analysis hasn't been saved. If you leave now, you'll need to analyze it again.") },
+            confirmButton = { TextButton(onClick = { confirmLeave = false; onBack() }) { Text("Discard") } },
+            dismissButton = { TextButton(onClick = { confirmLeave = false }) { Text("Keep editing") } }
+        )
+    }
+
     Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
-        ScreenTopBar("Review meal", onBack)
+        ScreenTopBar("Review meal", ::leave)
         if (file != null) {
             Box(
                 Modifier
@@ -893,11 +936,20 @@ fun ReviewScreen(
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            state.isLoading -> AnalyzingView(
-                "Analyzing your meal…",
-                "Identifying foods…",
-                Modifier.weight(1f).fillMaxWidth()
-            )
+            state.isLoading -> Column(Modifier.weight(1f).fillMaxWidth()) {
+                AiProgressView(
+                    "Analyzing your meal…",
+                    photo = file != null,
+                    onCancel = { vm.cancel() },
+                    modifier = Modifier.weight(1f).fillMaxWidth()
+                )
+                Text(
+                    "If this takes more than 30 seconds, Nourio finishes it in the background and adds it to your log.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
             state.offline -> Column(Modifier.weight(1f).padding(16.dp)) {
                 AppCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp)) {

@@ -42,6 +42,12 @@ Rules:
 - Respect the user's diet and allergies: never suggest anything that conflicts with them.
 - If the day is still in progress, make the suggestion for the rest of the day.
 - The user's daily maximums are context only. Do not set new targets.
+Science to keep advice accurate (use when relevant, don't lecture):
+- One day over or under barely changes body fat: a 500 kcal surplus is well under 0.1 kg of fat. Next-morning scale jumps after salty or high-carbohydrate days are water (about 3 g of water is stored with each gram of carbohydrate). Point to the weekly trend.
+- Logs usually miss some food: cooking oil, drinks, sauces, bites and tastes. If the log looks low for the activity, suggest logging these rather than eating less.
+- Calories burned from watches and estimates are approximate and usually run high for exercise; don't suggest eating them all back.
+- Protein spread over meals (about 25-30 g each) keeps people fuller and, with strength training, protects muscle while losing weight.
+- Short or broken sleep is often followed by eating more the next day.
 """
 
 /** Withdraws the coach's consent; it asks again before its next request. Saved notes stay on the phone. */
@@ -179,11 +185,14 @@ fun CoachCard(db: MealDb, goalStore: GoalStore, dayOffset: Int) {
             Spacer(Modifier.height(8.dp))
             val t = text
             when {
-                loading -> Text(
-                    "Writing…",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                loading -> Column {
+                    Text(
+                        "Writing…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    AiStatusLine()
+                }
                 t != null -> {
                     Text(t, style = MaterialTheme.typography.bodyMedium)
                     Text(
@@ -250,6 +259,12 @@ Rules:
 - If intake looks consistently very low, suggest talking to a doctor or dietitian.
 - Respect the user's diet and allergies: never suggest anything that conflicts with them.
 - The user's daily maximums are context only. Do not set new targets.
+Science to keep advice accurate (use when relevant, don't lecture):
+- One day over or under barely changes body fat: a 500 kcal surplus is well under 0.1 kg of fat. Next-morning scale jumps after salty or high-carbohydrate days are water (about 3 g of water is stored with each gram of carbohydrate). Point to the weekly trend.
+- Logs usually miss some food: cooking oil, drinks, sauces, bites and tastes. If the log looks low for the activity, suggest logging these rather than eating less.
+- Calories burned from watches and estimates are approximate and usually run high for exercise; don't suggest eating them all back.
+- Protein spread over meals (about 25-30 g each) keeps people fuller and, with strength training, protects muscle while losing weight.
+- Short or broken sleep is often followed by eating more the next day.
 """
 
 private const val WEEK_DAYS = 7
@@ -356,11 +371,14 @@ fun WeeklyReviewCard(db: MealDb, goalStore: GoalStore) {
             Spacer(Modifier.height(8.dp))
             val t = text
             when {
-                loading -> Text(
-                    "Looking over your week…",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                loading -> Column {
+                    Text(
+                        "Looking over your week…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    AiStatusLine()
+                }
                 t != null -> {
                     Text(t, style = MaterialTheme.typography.bodyMedium)
                     Text(

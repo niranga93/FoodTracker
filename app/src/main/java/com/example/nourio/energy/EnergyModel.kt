@@ -24,12 +24,19 @@ data class DayEnergy(
     val source: BurnSource,
     val steps: Long?,
     val logComplete: Boolean,   // finished day with a plausible amount of food logged
-    val resting: Double = 0.0   // the resting part of `burned`
+    val resting: Double = 0.0,  // the resting part of `burned`
+    val shownActivity: Double? = null,  // activity to display, when it isn't simply burned - resting
 ) {
     val balance: Double get() = eaten - burned
+    /** Calories burned by movement, as shown to the person. */
+    val activityKcal: Double get() = (shownActivity ?: (burned - resting)).coerceIn(0.0, burned)
 }
 
-data class BurnEstimate(val burned: Double, val source: BurnSource, val resting: Double)
+/**
+ * [shownActivity] is for display only: a device daily total holds the device's resting rate plus movement, so
+ * movement is the total above resting, while [resting] (which the body model uses) also carries digestion.
+ */
+data class BurnEstimate(val burned: Double, val source: BurnSource, val resting: Double, val shownActivity: Double? = null)
 
 data class Prediction(
     val usedDays: Int,
@@ -41,7 +48,13 @@ data class Prediction(
     val activityDays: Int,
     val largeDeficit: Boolean,
     val avgEaten: Double = 0.0,
-    val avgBurned: Double = 0.0
+    val avgBurned: Double = 0.0,
+    // From the body model and weigh-ins (null with the simple model)
+    val nowKg: Double? = null,           // today's weight, with day-to-day water smoothed out
+    val gapKcal: Double? = null,         // learned personal energy gap, kcal/day
+    val gapSd: Double? = null,
+    val waterKg: Double? = null,         // glycogen and salt water above usual today
+    val weighIns: Int = 0,
 )
 
 data class Calibration(
@@ -52,9 +65,25 @@ data class Calibration(
 )
 
 object EnergyModel {
-    const val KCAL_PER_KG = 7700.0          // common rule of thumb for body-weight change
+    const val KCAL_PER_KG = 7700.0          // the old rule; the body model ([BodyModel.energyPerKg]) replaces it
     const val MIN_LOGGED_KCAL = 800.0       // below this a day is treated as an incomplete log
-    private const val RESTING_FACTOR = 1.1  // BMR + digestion and tiny everyday movement
+    private const val RESTING_FACTOR = 1.1  // BMR + digestion, for [restingBurn] only
+    /**
+     * Everyday movement that step counts miss: standing, posture, chores, fidgeting. Standing alone burns about
+     * 10% above rest and light chores about 15% (Levine). Measured daily burn of sedentary adults is 1.4–1.7×
+     * BMR (FAO/WHO/UNU 2004), while BMR + 10% digestion + a few thousand steps only reaches about 1.2×. Phone
+     * step counts also miss the steps taken while the phone is put down. Weigh-ins calibrate the rest.
+     */
+    const val NEAT_SHARE = 0.20
+    /** With no activity data at all: unmeasured movement plus a little walking, about 1.4× BMR with digestion. */
+    const val NO_DATA_ACTIVITY_SHARE = 0.25
+    /** Digestion: about 10% of the energy eaten (protein ~25%, carbohydrate ~7%, fat ~2%). */
+    const val TEF_SHARE = 0.10
+    /**
+     * Wrist devices tend to overestimate exercise energy; validation studies put typical errors at 15–40%
+     * (Shcherbina et al., J Pers Med 2017). Active energy is trusted at 90% until weigh-ins calibrate it.
+     */
+    const val DEVICE_ACTIVE_TRUST = 0.90
     private const val WALK_KCAL_PER_KG_KM = 0.5
     private const val STEP_LENGTH_FACTOR = 0.415
 
@@ -92,40 +121,56 @@ object EnergyModel {
         else -> 0.0
     }
 
+    /**
+     * Calories burned in a day. "Resting" is BMR plus digestion ([TEF_SHARE] of [eaten], or of a typical day when
+     * the log isn't complete); the rest is movement. Without a device total, movement is the steps or device
+     * active energy plus everyday movement that steps miss ([NEAT_SHARE]).
+     */
     fun estimateBurn(
         body: Body,
         steps: Long?,
         activeKcal: Double?,
         deviceTotal: Double?,
-        distanceKm: Double? = null
+        distanceKm: Double? = null,
+        eaten: Double? = null,
     ): BurnEstimate {
         val bmr = bmr(body)
-        val resting = bmr * RESTING_FACTOR
+        val tef = TEF_SHARE * (eaten?.takeIf { it >= MIN_LOGGED_KCAL } ?: (1.4 * bmr))
+        val resting = bmr + tef
+        val neat = NEAT_SHARE * bmr
+        val active = activeKcal?.takeIf { it > 0 }?.let { it * DEVICE_ACTIVE_TRUST }
 
         // A plausible Health Connect total is trusted as the base figure
         val total = deviceTotal?.takeIf { it in (0.9 * bmr)..(3.5 * bmr) }
+            // A total only from part of the day (or a watch not worn) still counts, with no separate active figure
+            ?: deviceTotal?.takeIf { it > 0 && it < 0.9 * bmr && (activeKcal == null || activeKcal <= 0) }
         if (total != null) {
             if (activeKcal != null && activeKcal > 0) {
-                return BurnEstimate(total, BurnSource.DEVICE_TOTAL, (total - activeKcal).coerceAtLeast(0.0))
+                val trimmed = total - (activeKcal - active!!)          // the device's own resting part stays
+                return BurnEstimate(trimmed, BurnSource.DEVICE_TOTAL, (trimmed - active).coerceAtLeast(0.0))
             }
-            // No active calories reported. A total this close to resting looks like a resting-only
-            // figure, so add the steps estimate on top.
-            if (total < 1.2 * bmr) {
-                val extra = walkKcal(steps, distanceKm, body)
-                val source = if (extra > 0) BurnSource.DEVICE_RESTING_PLUS_STEPS else BurnSource.DEVICE_TOTAL
-                return BurnEstimate(total + extra, source, total)
+            // No active calories reported (Samsung Health sends only a daily total: its resting rate for the
+            // day plus movement so far). Counting the steps on top of that total counted an 8,000-step day
+            // twice (~600-800 kcal too high). Early in the day the device may not have added the walking yet,
+            // so the burn is whichever is larger: the device total, or resting plus the steps. That keeps it
+            // rising smoothly through the day (it used to add a typical day's movement early on, then drop
+            // once the device total took over).
+            val walk = walkKcal(steps, distanceKm, body)
+            if (total < bmr + walk) {
+                val burned = bmr + walk
+                return BurnEstimate(burned, BurnSource.DEVICE_RESTING_PLUS_STEPS, minOf(resting, burned), shownActivity = walk)
             }
-            return BurnEstimate(total, BurnSource.DEVICE_TOTAL, minOf(resting, total))
+            return BurnEstimate(total, BurnSource.DEVICE_TOTAL, minOf(resting, total), shownActivity = total - minOf(bmr, total))
         }
 
-        if (activeKcal != null && activeKcal > 0) {
-            return BurnEstimate(resting + activeKcal, BurnSource.BMR_PLUS_ACTIVITY, resting)
+        if (active != null) {
+            return BurnEstimate(resting + neat + active, BurnSource.BMR_PLUS_ACTIVITY, resting)
         }
         val walk = walkKcal(steps, distanceKm, body)
         if (walk > 0) {
-            return BurnEstimate(resting + walk, BurnSource.BMR_PLUS_STEPS, resting)
+            return BurnEstimate(resting + neat + walk, BurnSource.BMR_PLUS_STEPS, resting)
         }
-        return BurnEstimate(resting, BurnSource.BMR_ONLY, resting)
+        return BurnEstimate(resting + NO_DATA_ACTIVITY_SHARE * bmr, BurnSource.BMR_ONLY, resting)
     }
 
     /**

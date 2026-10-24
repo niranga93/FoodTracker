@@ -21,6 +21,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.nourio.backup.BackupService
 import com.example.nourio.data.GoalStore
@@ -125,14 +129,28 @@ fun GoalsCard(goalStore: GoalStore, db: MealDb, autoSave: Boolean = false) {
 
     WidgetCard("Daily limits") {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            val planKcal = budget?.takeIf { it.plan != null }?.baseKcal
             if (plan.targetKg > 0 && plan.useTargetGoal) {
-                Text(
-                    "Calories come from your target weight.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                // The typed value isn't used while the target plan sets calories, so show the plan's figure instead
+                // Read-only, so shown as a tinted box rather than a field, with the same rounding as the fields
+                Column(
+                    Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(14.dp)
+                ) {
+                    Text("Calories", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        planKcal?.let { "%,d kcal a day".format(it.toLong()) } ?: "Working out…",
+                        style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "Set by your target weight and pace below, from your average burn. Each day's budget also adjusts for going over or under the day before.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                GField("Calories", "kcal", kcal, Modifier.fillMaxWidth()) { kcal = it; saved = false }
             }
-            GField("Calories", "kcal", kcal, Modifier.fillMaxWidth()) { kcal = it; saved = false }
 
             Text("Maximums", style = MaterialTheme.typography.labelMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -30,22 +30,31 @@ object GeminiRouter {
     private const val RATE_LIMIT_COOLDOWN_MS = 2 * 60 * 1000L
     private const val BAD_KEY_COOLDOWN_MS = 60 * 60 * 1000L
     private const val MODEL_GONE_COOLDOWN_MS = 60 * 60 * 1000L
+    private const val BUSY_COOLDOWN_MS = 60 * 1000L      // an overloaded model is skipped for a minute
     private const val ROUNDS = 3
     private const val BASE = "https://generativelanguage.googleapis.com/v1beta"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(45, TimeUnit.SECONDS)
         .build()
+
+    // A reply usually takes 5-10 s. While other models are left to try, a model gets QUICK_S before the
+    // next one is tried (one stuck model used to cost 40 s); the last option gets PATIENT_S.
+    private const val QUICK_S = 20L
+    private const val PATIENT_S = 45L
 
     // Times until which something is avoided. Rate limits are per model and key, as Google's quotas are.
     private val badKeyUntil = ConcurrentHashMap<String, Long>()
     private val rateLimitedUntil = ConcurrentHashMap<String, Long>()     // "model|key"
     private val modelGoneUntil = ConcurrentHashMap<String, Long>()
+    private val busyUntil = ConcurrentHashMap<String, Long>()           // "model|key"
     @Volatile private var seenKeysVersion = -1
 
     // The key in use: the first one, or the last one that worked. Changes only when every model fails on it.
     @Volatile private var currentKey: String? = null
+    // The model that answered last: tried first next time, so a busy best model isn't retried every request
+    @Volatile private var currentModel: String? = null
 
     private val catalogLock = Mutex()
     @Volatile private var catalog: List<String> = emptyList()
@@ -56,13 +65,14 @@ object GeminiRouter {
     private fun now() = System.currentTimeMillis()
 
     private fun clearCooldowns() {
-        badKeyUntil.clear(); rateLimitedUntil.clear(); modelGoneUntil.clear()
+        badKeyUntil.clear(); rateLimitedUntil.clear(); modelGoneUntil.clear(); busyUntil.clear()
     }
 
     /** Back to the first key with no cool-downs: after the keys change, and in tests. */
     internal fun reset() {
         clearCooldowns()
         currentKey = null
+        currentModel = null
     }
 
     /** Models to try, best first. Exposed for the key card. */
@@ -105,7 +115,7 @@ object GeminiRouter {
             }
             page = root.optString("nextPageToken").ifBlank { null }
         } while (page != null)
-        return rank(names)
+        return rank(names.filter { ModelCaps.isChat(it) })
     }
 
     // Free-tier text and vision models are the Flash family. Pro has little or no free quota, and the
@@ -160,7 +170,7 @@ object GeminiRouter {
             catalogAt = 0L                       // new keys may unlock different models
             seenKeysVersion = GeminiKeys.version
         }
-        return route(keys, modelsFor(keys), { model, key -> send(model, key, bodyJson) }, { delay(it) })
+        return route(keys, modelsFor(keys), { model, key, patient -> send(model, key, bodyJson, patient) }, { delay(it) })
     }
 
     /**
@@ -177,7 +187,7 @@ object GeminiRouter {
     internal suspend fun route(
         keys: List<String>,
         models: List<String>,
-        send: suspend (model: String, key: String) -> Attempt,
+        send: suspend (model: String, key: String, patient: Boolean) -> Attempt,
         pause: suspend (Long) -> Unit,
     ): String {
         var waitMs = 2000L
@@ -185,28 +195,49 @@ object GeminiRouter {
         for (round in 0 until ROUNDS) {
             var triedAny = false
             val start = keys.indexOf(currentKey).coerceAtLeast(0)
+        // The model that worked last goes first; the rest keep their best-first order
+        val order = currentModel?.takeIf { it in models }?.let { listOf(it) + (models - it) } ?: models
             keyLoop@ for (step in keys.indices) {
                 val i = (start + step) % keys.size
                 val key = keys[i]
                 if ((badKeyUntil[key] ?: 0L) > now()) continue
-                for (model in models) {
+                val masked = AiProgress.maskKey(i, key)
+                for ((mi, model) in order.withIndex()) {
                     val t = now()
-                    if ((modelGoneUntil[model] ?: 0L) > t || (rateLimitedUntil["$model|$key"] ?: 0L) > t) continue
+                    if ((modelGoneUntil[model] ?: 0L) > t || (rateLimitedUntil["$model|$key"] ?: 0L) > t ||
+                        (busyUntil["$model|$key"] ?: 0L) > t) continue
                     triedAny = true
-                    when (val a = send(model, key)) {
+                    AiProgress.trying(model, masked)
+                    // Patient only when nothing else is left to try in this round, or on a retry round
+                    val patient = round > 0 || (step == keys.size - 1 && mi == order.size - 1)
+                    when (val a = send(model, key, patient)) {
                         is Attempt.Ok -> {
                             if (currentKey != key) Log.d("Gemini", "now using key #${i + 1}")
                             currentKey = key
+                            currentModel = model
                             return a.raw
                         }
                         is Attempt.Fail -> {
                             lastError = a.message
                             Log.w("Gemini", "${tag(i, model)} failed (${a.message})")
                             when (a.kind) {
-                                Failure.RATE_LIMITED -> rateLimitedUntil["$model|$key"] = now() + RATE_LIMIT_COOLDOWN_MS
-                                Failure.MODEL_GONE -> modelGoneUntil[model] = now() + MODEL_GONE_COOLDOWN_MS
-                                Failure.OVERLOADED -> Unit
-                                Failure.BAD_KEY -> { badKeyUntil[key] = now() + BAD_KEY_COOLDOWN_MS; break }
+                                Failure.RATE_LIMITED -> {
+                                    rateLimitedUntil["$model|$key"] = now() + RATE_LIMIT_COOLDOWN_MS
+                                    AiProgress.event("$model on key $masked hit its limit, trying the next one")
+                                }
+                                Failure.MODEL_GONE -> {
+                                    modelGoneUntil[model] = now() + MODEL_GONE_COOLDOWN_MS
+                                    AiProgress.event("$model isn't available any more, skipping it")
+                                }
+                                Failure.OVERLOADED -> {
+                                    busyUntil["$model|$key"] = now() + BUSY_COOLDOWN_MS
+                                    AiProgress.event("$model is busy or slow, trying the next model")
+                                }
+                                Failure.BAD_KEY -> {
+                                    badKeyUntil[key] = now() + BAD_KEY_COOLDOWN_MS
+                                    AiProgress.event("Key $masked was rejected, switching key")
+                                    break
+                                }
                                 Failure.NETWORK -> break@keyLoop
                                 Failure.REJECTED -> error("Gemini rejected the request. ${a.message}")
                             }
@@ -219,6 +250,7 @@ object GeminiRouter {
             // Everything is resting: clear the cool-downs and try again after the wait
             if (!triedAny) clearCooldowns()
             if (round < ROUNDS - 1) {
+                AiProgress.event("Every model is busy, waiting ${waitMs / 1000} s before trying again")
                 pause(waitMs)
                 waitMs *= 2
             }
@@ -226,13 +258,15 @@ object GeminiRouter {
         error("All Gemini API keys failed. Last error: $lastError")
     }
 
-    private fun send(model: String, key: String, bodyJson: String): Attempt = try {
+    private suspend fun send(model: String, key: String, bodyJson: String, patient: Boolean): Attempt = try {
         val request = Request.Builder()
             .url("$BASE/models/$model:generateContent")
             .header("x-goog-api-key", key)
             .post(bodyJson.toRequestBody("application/json".toMediaType()))
             .build()
-        client.newCall(request).execute().use { resp ->
+        val call = client.newCall(request)
+        call.timeout().timeout(if (patient) PATIENT_S else QUICK_S, TimeUnit.SECONDS)
+        call.await().use { resp ->
             val raw = resp.body.string()
             if (resp.isSuccessful) Attempt.Ok(raw)
             else {
@@ -247,6 +281,9 @@ object GeminiRouter {
                 Attempt.Fail(kind, message)
             }
         }
+    } catch (e: java.io.InterruptedIOException) {
+        // Timed out: the model is slow right now, so the next one gets a turn (the connection itself works)
+        Attempt.Fail(Failure.OVERLOADED, "$model timed out")
     } catch (e: IOException) {
         Attempt.Fail(Failure.NETWORK, "Network error: ${e.message}")
     }

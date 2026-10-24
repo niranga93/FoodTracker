@@ -74,13 +74,42 @@ object AiConsent {
     /** For code without a context; false until [init] has run, so nothing is sent by accident. */
     fun isGranted(use: AiUse): Boolean {
         val p = prefs ?: return false
-        return p.getBoolean(use.key, legacy[use] ?: false)
+        return p.getBoolean(ALL, false) || p.getBoolean(use.key, legacy[use] ?: false)
+    }
+
+    /** "Always allow": every AI feature may send its data without asking again. */
+    fun isAllGranted(context: Context): Boolean {
+        init(context)
+        return prefs!!.getBoolean(ALL, false)
+    }
+
+    /**
+     * Turning "always allow" on covers every feature, now and in later versions. Turning it off withdraws
+     * consent for all of them, so each asks again before it next sends anything.
+     */
+    fun setAll(context: Context, on: Boolean) {
+        init(context)
+        prefs!!.edit {
+            putBoolean(ALL, on)
+            if (!on) AiUse.entries.forEach { putBoolean(it.key, false) }
+        }
     }
 
     fun set(context: Context, use: AiUse, on: Boolean) {
         init(context)
-        prefs!!.edit { putBoolean(use.key, on) }
+        val p = prefs!!
+        // Switching one feature off while "always allow" is on: keep the others allowed, just not this one
+        if (!on && p.getBoolean(ALL, false)) {
+            p.edit {
+                putBoolean(ALL, false)
+                AiUse.entries.forEach { putBoolean(it.key, it != use) }
+            }
+            return
+        }
+        p.edit { putBoolean(use.key, on) }
     }
+
+    private const val ALL = "all"
 
     /** Tests run many app instances in one process: start each from nothing. */
     internal fun resetForTests() {

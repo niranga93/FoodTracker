@@ -104,7 +104,8 @@ fun HomeScreen(
             week = offs.map { off ->
                 val kcal = mealsByOffset[off].orEmpty().flatMap { it.items }.totals().kcal
                 val raw = EnergyRepo.build(body, off, kcal, acts[off])
-                raw.copy(burned = raw.burned * factor)
+                // All parts scaled alike, so Movement's activity matches the budget chart's
+                raw.copy(burned = raw.burned * factor, resting = raw.resting * factor, shownActivity = raw.shownActivity?.times(factor))
             }
         }
     }
@@ -145,7 +146,7 @@ fun HomeScreen(
         // 1. Today: energy, the key nutrients and one thing to focus on
         item {
             TodayCard(
-                report = report, dayOffset = dayOffset, totals = totals, budget = goalKcal, burned = day?.burned,
+                report = report, dayOffset = dayOffset, totals = totals, budget = goalKcal, burned = day?.burned, breakdown = budget,
                 goals = goals, weightKg = profile.weightKg, waterMl = waterMl, waterGoalMl = water.goalMl,
                 onAddWater = { waterMl = water.add(dayOffset, 250) },
                 onOpenBudget = { openPage("budget:$dayOffset") }
@@ -166,7 +167,7 @@ fun HomeScreen(
             if (features.isOn("home_sleep")) add { SleepBodyRow(sleep, dayOffset, sleepGoal) { openPage("body:$dayOffset") } }
             if (features.isOn("home_fast")) add { com.example.nourio.fasting.FastingBodyRow(db, dayOffset) }
             if (features.isOn("home_walk")) add {
-                MoveBodyRow(day?.steps, day?.let { (it.burned - it.resting).coerceAtLeast(0.0) }, goals.stepGoal) { onOpenTab(NavTab.Burned) }
+                MoveBodyRow(day?.steps, day?.activityKcal, goals.stepGoal) { onOpenTab(NavTab.Burned) }
             }
         }
         if (rows.isNotEmpty()) item { BodyTodayCard(rows) }

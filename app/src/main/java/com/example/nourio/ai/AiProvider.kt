@@ -91,6 +91,7 @@ object AiSettings {
 
     fun init(context: Context) {
         if (prefs == null) prefs = context.applicationContext.getSharedPreferences("ai_provider", Context.MODE_PRIVATE)
+        ModelCaps.init(context)
         refresh()
     }
 
@@ -109,7 +110,7 @@ object AiSettings {
         init(context)
         if (provider == this.provider) return
         p()!!.edit { putString("provider", provider.id) }
-        AiUse.entries.forEach { AiConsent.set(context, it, false) }
+        AiConsent.setAll(context, false)   // "always allow" was for the old company, so it goes too
         refresh()
     }
 
@@ -133,8 +134,12 @@ object AiSettings {
         else -> key() != null && model() != null
     }
 
-    /** Photos need a provider whose API reads images. */
-    fun photosSupported(): Boolean = provider.photos
+    /** Photos need a provider whose API reads images, and a model of it that does. */
+    fun photosSupported(): Boolean = when {
+        !provider.photos -> false
+        provider == Provider.GEMINI -> true
+        else -> ModelCaps.photoModel(provider, model()) != null
+    }
 
     fun refresh() { _available.value = isReady() }
 

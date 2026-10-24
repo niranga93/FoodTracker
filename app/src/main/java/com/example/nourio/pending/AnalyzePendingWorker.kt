@@ -28,30 +28,39 @@ import com.example.nourio.nutrition.MealPipeline
 import com.example.nourio.nutrition.NutritionLookup
 import java.util.concurrent.TimeUnit
 
-/** Analyzes queued offline photos once there is a network connection, then notifies. */
+/**
+ * Analyzes queued meals once there is a network connection: photos taken offline (then the user reviews
+ * them) and photos or descriptions whose analysis took too long on screen (saved to the log automatically).
+ */
 class AnalyzePendingWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
         val ctx = applicationContext
         NutritionLookup.init(ctx)
         PortionStore.init(ctx)
-        // Queued photos are sent only with photo consent; without it they wait, untouched
-        if (!com.example.nourio.ai.AiConsent.isGranted(ctx, com.example.nourio.ai.AiUse.PHOTO)) return Result.success()
-
         var retry = false
         for (p in PendingMeals.all(ctx).filter { it.status == PendingStatus.WAITING }) {
-            MealPipeline.run(p.photo).fold(
+            // Each meal is sent only with consent for its kind; without it, it waits untouched
+            val use = if (p.photo != null) com.example.nourio.ai.AiUse.PHOTO else com.example.nourio.ai.AiUse.TEXT
+            if (!com.example.nourio.ai.AiConsent.isGranted(ctx, use)) continue
+            val result = if (p.photo != null) MealPipeline.run(p.photo) else MealPipeline.runText(p.text.orEmpty())
+            result.fold(
                 onSuccess = {
-                    PendingMeals.saveResult(ctx, p.id, it)
-                    notifyReady(ctx, p, it.description)
+                    if (p.autoSave && it.items.isNotEmpty()) saveToLog(ctx, p, it)
+                    else {
+                        PendingMeals.saveResult(ctx, p.id, it)
+                        notifyReady(ctx, p, it.description)
+                    }
                 },
                 onFailure = { err ->
                     val msg = err.message ?: "Analysis failed"
                     Log.w("PendingWorker", "meal ${p.id}: $msg")
                     // Errors no retry can fix; anything else (network, busy servers) is tried again later
                     val permanent = PERMANENT_ERRORS.any { it in msg }
-                    if (permanent || runAttemptCount >= MAX_ATTEMPTS) PendingMeals.saveFailure(ctx, p.id, msg)
-                    else retry = true
+                    if (permanent || runAttemptCount >= MAX_ATTEMPTS) {
+                        PendingMeals.saveFailure(ctx, p.id, msg)
+                        if (p.autoSave) notifyFailed(ctx, p)
+                    } else retry = true
                 }
             )
         }
@@ -72,6 +81,47 @@ class AnalyzePendingWorker(context: Context, params: WorkerParameters) : Corouti
             // Append so a photo queued while a run is in progress is still picked up
             WorkManager.getInstance(context)
                 .enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+        }
+
+        const val EXTRA_MEAL_ID = "saved_meal_id"
+
+        /** Adds the analyzed meal to the log at the time it was logged for, as the Save button would. */
+        private fun saveToLog(context: Context, p: PendingMeal, a: com.example.nourio.nutrition.Analysis) {
+            val mealId = com.example.nourio.data.MealDb(context).insert(a.description, a.items, p.mealTs)
+            PendingMeals.remove(context, p.id, keepPhoto = true)
+            p.photo?.let { photo -> if (mealId > 0) com.example.nourio.data.MealPhotos.save(context, mealId, photo) }
+            com.example.nourio.backup.BackupService.autoBackup(context)
+            val kcal = a.items.sumOf { it.kcal }.toInt()
+            notify(
+                context, p.id.toInt(),
+                "Added your ${p.label} to your log",
+                "${a.description} · ${"%,d".format(kcal)} kcal. Tap to check it.",
+                Intent(context, MainActivity::class.java).putExtra(EXTRA_MEAL_ID, mealId),
+            )
+        }
+
+        private fun notifyFailed(context: Context, p: PendingMeal) = notify(
+            context, p.id.toInt(),
+            "Couldn't analyze your ${p.label}",
+            "Tap to try again or add it by hand.",
+            Intent(context, MainActivity::class.java).putExtra(EXTRA_PENDING_ID, p.id),
+        )
+
+        private fun notify(context: Context, id: Int, title: String, text: String, open: Intent) {
+            if (Build.VERSION.SDK_INT >= 33 &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+            ) return
+            open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            val pi = PendingIntent.getActivity(context, id, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            val n = NotificationChannels.builder(context, NotificationChannels.MEAL_READY)
+                .setContentTitle(title)
+                .setContentText(text)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                .setContentIntent(pi)
+                .setAutoCancel(true)
+                .build()
+            NotificationManagerCompat.from(context).notify(id, n)
         }
 
         private fun notifyReady(context: Context, p: PendingMeal, mealDescription: String) {

@@ -55,9 +55,10 @@ private fun Nudge(text: String, color: Color) {
     Row(
         Modifier.fillMaxWidth().padding(top = 14.dp).clip(RoundedCornerShape(14.dp))
             .background(color.copy(alpha = 0.12f)).padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.Top
     ) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+        // Level with the first line of text, not the middle of the paragraph
+        Box(Modifier.padding(top = 7.dp).size(8.dp).clip(CircleShape).background(color))
         Spacer(Modifier.width(10.dp))
         Text(text, style = MaterialTheme.typography.bodyMedium)
     }
@@ -65,7 +66,7 @@ private fun Nudge(text: String, color: Color) {
 
 @Composable
 private fun StatCell(value: String, label: String, modifier: Modifier = Modifier, color: Color? = null) {
-    Column(modifier) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = color ?: MaterialTheme.colorScheme.onSurface)
         Muted(label)
     }
@@ -85,7 +86,9 @@ fun WeekCard(week: List<DayEnergy>, budgetKcal: Double, weight: WeightLine?, onO
     val cs = MaterialTheme.colorScheme
     val ordered = week.reversed()                         // oldest on the left
     val logged = ordered.filter { it.logComplete || (it.offset == 0 && it.eaten > 0) }
-    val total = logged.sumOf { it.balance }
+    // Today is still going, so totals and the best day use finished days; today's chip shows it so far
+    val finished = logged.filter { it.offset < 0 }
+    val total = finished.sumOf { it.balance }
     WidgetCard("This week") {
         WeightRow(weight, onOpenWeight)
         if (logged.isEmpty()) {
@@ -119,7 +122,7 @@ fun WeekCard(week: List<DayEnergy>, budgetKcal: Double, weight: WeightLine?, onO
                     Box(Modifier.size(10.dp).clip(CircleShape).background(if (counted) c else cs.onSurfaceVariant.copy(alpha = 0.3f)))
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        if (counted) "%+.1fk".format(d.balance / 1000) else "—",
+                        if (!counted) "—" else if (kotlin.math.abs(d.balance) < 50) "0.0k" else "%+.1fk".format(d.balance / 1000),
                         style = MaterialTheme.typography.labelSmall, color = if (counted) c else cs.onSurfaceVariant,
                         maxLines = 1
                     )
@@ -128,18 +131,24 @@ fun WeekCard(week: List<DayEnergy>, budgetKcal: Double, weight: WeightLine?, onO
         }
 
         Spacer(Modifier.height(14.dp))
-        val underBudget = if (budgetKcal > 0) logged.count { it.eaten <= budgetKcal } else null
-        val best = logged.minByOrNull { it.balance }
+        val underBudget = if (budgetKcal > 0) finished.count { it.eaten <= budgetKcal } else null
+        val best = finished.minByOrNull { it.balance }
         Row(Modifier.fillMaxWidth()) {
             StatCell("${logged.size}/7", "days logged", Modifier.weight(1f))
-            underBudget?.let { StatCell("$it/${logged.size}", "on budget", Modifier.weight(1f)) }
-            best?.let { StatCell("${dayLetter(it.offset)} ${signed(it.balance)}", "best day", Modifier.weight(1.3f), cs.primary) }
+            underBudget?.takeIf { finished.isNotEmpty() }?.let { StatCell("$it/${finished.size}", "on budget", Modifier.weight(1f)) }
+            best?.let { StatCell("${dayLetter(it.offset)} ${signed(it.balance)}", "best day", Modifier.weight(1f), cs.primary) }
         }
 
-        val kg = abs(total) / EnergyModel.KCAL_PER_KG
+        // This person's kcal per kg (less the leaner they are), not a fixed 7,700
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val perKg = remember {
+            com.example.nourio.energy.EnergyRepo.body(com.example.nourio.data.ProfileStore(context).load()).first
+                ?.let { com.example.nourio.plan.BudgetModel.kcalPerKg(it) } ?: EnergyModel.KCAL_PER_KG
+        }
+        val kg = abs(total) / perKg
         Nudge(
             when {
-                total <= 0 && logged.size >= 4 -> "You've burned ${n(-total)} kcal more than you ate this week, roughly ${"%.2f".format(kg)} kg. Keep this rhythm going!"
+                total <= 0 && logged.size >= 4 -> "You've burned ${n(-total)} kcal more than you ate this week, roughly ${"%.2f".format(kg)} kg of body tissue. The scale may move more or less this week with water. Keep this rhythm going!"
                 total <= 0 -> "Good start: ${n(-total)} kcal in deficit so far. Log every day to see the full picture."
                 else -> "You're ${n(total)} kcal over this week. Two lighter days or a few extra walks would even it out."
             },

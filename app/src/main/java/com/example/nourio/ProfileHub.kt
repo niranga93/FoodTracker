@@ -64,7 +64,7 @@ fun PageScreen(id: String, db: MealDb, goalStore: GoalStore, onBack: () -> Unit)
         ) {
             when (id) {
                 "me" -> PersonalCard()
-                "goals" -> { GoalsCard(goalStore, db); TargetCard() }
+                "goals" -> { GoalsCard(goalStore, db); TargetCard(db = db, goalStore = goalStore) }
                 "diet" -> DietCard()
                 "weight" -> { WeightCard(); OutlookCard(db) }   // weigh-ins, then where the trend is heading
                 "connections" -> {

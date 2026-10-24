@@ -42,12 +42,18 @@ fun AiConsentDialog(use: AiUse, onAgree: () -> Unit, onDismiss: () -> Unit) {
                 }
                 Text(AiUse.common(com.example.nourio.ai.AiSettings.provider), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
-                    "You can turn this off any time in Profile > Data & privacy.",
+                    "\"Always allow\" covers every AI feature (photos, meal descriptions, coach, assistant and guideline " +
+                        "updates), so Nourio won't ask again. You can turn it off any time in Profile > Data & privacy.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { AiConsent.set(context, use, true); onAgree() }) { Text("Allow") } },
+        confirmButton = {
+            androidx.compose.foundation.layout.Row {
+                TextButton(onClick = { AiConsent.set(context, use, true); onAgree() }) { Text("Only this") }
+                androidx.compose.material3.Button(onClick = { AiConsent.setAll(context, true); onAgree() }) { Text("Always allow") }
+            }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Not now") } }
     )
 }
@@ -63,8 +69,27 @@ fun AiConsentCard() {
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 4.dp)
         )
+        // Bumped whenever a switch changes, so "always allow" and the per-feature switches stay in step
+        var version by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+        var all by remember { mutableStateOf(AiConsent.isAllGranted(context)) }
+        androidx.compose.foundation.layout.Row(
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            modifier = Modifier.padding(vertical = 8.dp)
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Always allow AI features", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Every feature below may send its data without asking. Turn off to be asked again for each one.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            androidx.compose.material3.Switch(checked = all, onCheckedChange = {
+                all = it; AiConsent.setAll(context, it); version++
+            })
+        }
+        HorizontalDivider()
         AiUse.entries.forEachIndexed { i, use ->
-            key(use) {
+            key(use, version) {
                 var on by remember { mutableStateOf(AiConsent.isGranted(context, use)) }
                 Column(Modifier.fillMaxWidth()) {
                     androidx.compose.foundation.layout.Row(
@@ -75,7 +100,10 @@ fun AiConsentCard() {
                             Text(use.title, style = MaterialTheme.typography.bodyLarge)
                             Text("Sends: ${use.sends}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        androidx.compose.material3.Switch(checked = on, onCheckedChange = { on = it; AiConsent.set(context, use, it) })
+                        androidx.compose.material3.Switch(checked = on, onCheckedChange = {
+                            on = it; AiConsent.set(context, use, it)
+                            all = AiConsent.isAllGranted(context)
+                        })
                     }
                     if (i < AiUse.entries.lastIndex) HorizontalDivider()
                 }

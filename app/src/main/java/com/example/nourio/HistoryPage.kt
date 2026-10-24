@@ -124,8 +124,10 @@ private fun HistoryList(db: MealDb, goalStore: GoalStore, onOpenDay: (Int) -> Un
     val goal = budget?.baseKcal?.takeIf { it > 0 } ?: goals.kcal
     val days = remember { (0 downTo -13).map { off -> off to loadDay(db, off).flatMap { it.items }.totals() } }
     val logged = days.filter { it.second.kcal > 0 }
-    val avg = if (logged.isEmpty()) 0.0 else logged.map { it.second.kcal }.average()
-    val within = logged.count { goal <= 0 || it.second.kcal <= goal }
+    // Today isn't over, so the average and "within goal" use finished days
+    val finished = logged.filter { it.first < 0 }
+    val avg = if (finished.isEmpty()) 0.0 else finished.map { it.second.kcal }.average()
+    val within = finished.count { goal <= 0 || it.second.kcal <= goal }
     val maxKcal = (days.maxOfOrNull { it.second.kcal } ?: 0.0).coerceAtLeast(1.0)
     val nf = remember { NumberFormat.getIntegerInstance() }
     val timeline = days.reversed()      // oldest on the left
@@ -140,7 +142,7 @@ private fun HistoryList(db: MealDb, goalStore: GoalStore, onOpenDay: (Int) -> Un
                 "Calories, last 14 days",
                 trailing = {
                     TextButton(onClick = {
-                        val week = days.take(7).filter { it.second.kcal > 0 }
+                        val week = days.drop(1).take(7).filter { it.second.kcal > 0 }
                         val text = if (week.isEmpty()) "Nourio: no meals logged in the last 7 days."
                         else "Nourio, last 7 days\n" +
                             "Days logged: ${week.size} of 7\n" +

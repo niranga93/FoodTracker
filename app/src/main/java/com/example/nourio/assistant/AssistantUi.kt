@@ -318,7 +318,10 @@ private fun ThinkingBubble() {
         Spacer(Modifier.width(10.dp))
         CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
         Spacer(Modifier.width(10.dp))
-        Text("Looking through your records…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column {
+            Text("Looking through your records…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            com.example.nourio.AiStatusLine()
+        }
     }
 }
 

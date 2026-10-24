@@ -98,8 +98,10 @@ fun ManualEntryScreen(
         recents.sortedByDescending { FavoritesStore.key(it) in favKeys }   // favorites first, then newest
     }
 
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     fun runSearch() {
         if (query.isBlank()) return
+        keyboard?.hide()   // otherwise the keyboard covers the results
         searching = true
         searchError = null
         picked = null

@@ -55,6 +55,7 @@ object HistoryLoader {
                 v[Metric.SUGAR] = t.addedSugar
                 v[Metric.SAT_FAT] = t.satFat
                 v[Metric.SODIUM] = t.sodium
+                v[Metric.CARBS] = t.carbs
                 val last = Instant.ofEpochMilli(meals.maxOf { it.timestamp }).atZone(zone)
                 v[Metric.LAST_MEAL] = last.hour + last.minute / 60.0
                 loggedDays += date

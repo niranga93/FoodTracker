@@ -22,8 +22,11 @@ val DIETS: List<String> =
 data class DietSettings(
     val diets: Set<String> = emptySet(),
     val allergens: Set<String> = emptySet(),
-    val other: List<String> = emptyList()
+    val other: List<String> = emptyList(),
+    val noDiet: Boolean = false,        // the person confirmed they follow no particular diet
+    val noAllergies: Boolean = false,   // the person confirmed they have no allergies
 ) {
+    /** No restrictions to check food against (whether confirmed or just not set). */
     fun isEmpty() = diets.isEmpty() && allergens.isEmpty() && other.isEmpty()
 }
 
@@ -34,7 +37,9 @@ class DietStore(context: Context) {
         diets = p.getStringSet("diets", emptySet())?.toSet() ?: emptySet(),
         allergens = p.getStringSet("allergens", emptySet())?.toSet() ?: emptySet(),
         other = (p.getString("other", "") ?: "").split(',')
-            .map { it.trim().lowercase() }.filter { it.isNotBlank() }
+            .map { it.trim().lowercase() }.filter { it.isNotBlank() },
+        noDiet = p.getBoolean("no_diet", false),
+        noAllergies = p.getBoolean("no_allergies", false),
     )
 
     fun save(s: DietSettings) {
@@ -42,6 +47,8 @@ class DietStore(context: Context) {
             putStringSet("diets", s.diets)
             putStringSet("allergens", s.allergens)
             putString("other", s.other.joinToString(","))
+            putBoolean("no_diet", s.noDiet)
+            putBoolean("no_allergies", s.noAllergies)
         }
     }
 }

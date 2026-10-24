@@ -53,8 +53,12 @@ data class ReviewUiState(
     val items: List<FoodItem> = emptyList(),
     val error: String? = null,
     val offline: Boolean = false,    // photo not analyzed because there is no connection
-    val needsConsent: com.example.nourio.ai.AiUse? = null   // waiting for the user to allow sending it to Gemini
+    val needsConsent: com.example.nourio.ai.AiUse? = null,  // waiting for the user to allow sending it to Gemini
+    val slow: Boolean = false        // still analyzing after SLOW_MS: the screen moves it to the background
 )
+
+/** How long the review screen waits before finishing an analysis in the background. */
+const val SLOW_MS = 30_000L
 
 /**
  * Analyzes either a meal photo or a typed/spoken description (exactly one is set).
@@ -98,9 +102,18 @@ class ReviewViewModel(
             _state.update { it.copy(isLoading = false, needsConsent = use) }
             return
         }
-        viewModelScope.launch {
-            _state.update { it.copy(isLoading = true, error = null, offline = false) }
+        job?.cancel()
+        slowTimer?.cancel()
+        slowTimer = viewModelScope.launch {
+            kotlinx.coroutines.delay(SLOW_MS)
+            if (_state.value.isLoading) _state.update { it.copy(slow = true) }
+        }
+        job = viewModelScope.launch {
+            _state.update { it.copy(isLoading = true, error = null, offline = false, slow = false) }
             val result = if (file != null) MealPipeline.run(file) else MealPipeline.runText(text.orEmpty())
+            if (result.exceptionOrNull() is kotlinx.coroutines.CancellationException) return@launch
+            slowTimer?.cancel()
+            if (_state.value.slow) return@launch     // already handed to the background
             result.fold(
                 onSuccess = { res ->
                     _state.update {
@@ -114,6 +127,26 @@ class ReviewViewModel(
                 }
             )
         }
+    }
+
+    private var job: kotlinx.coroutines.Job? = null
+    private var slowTimer: kotlinx.coroutines.Job? = null
+
+    /** Stops the on-screen request because the background worker takes it over. */
+    fun cancelForBackground() {
+        job?.cancel()
+        slowTimer?.cancel()
+        job = null
+        com.example.nourio.ai.AiProgress.end()
+    }
+
+    /** Cancel on the progress screen: stops the request; nothing is saved. */
+    fun cancel() {
+        job?.cancel()
+        slowTimer?.cancel()
+        job = null
+        com.example.nourio.ai.AiProgress.end()
+        _state.update { it.copy(isLoading = false, error = "Cancelled. Nothing was sent to your diary.") }
     }
 
     fun setGrams(index: Int, grams: Double) = _state.update { s ->

@@ -23,10 +23,21 @@ class GeminiRoutingTest {
 
     /** Sends one request; [fails] maps "model|key" to the failure that call returns. */
     private fun request(fails: Map<String, Failure> = emptyMap()): String = runBlocking {
-        GeminiRouter.route(keys, models, { model, key ->
+        GeminiRouter.route(keys, models, { model, key, _ ->
             calls += "$model|$key"
             fails["$model|$key"]?.let { Attempt.Fail(it, "$model|$key $it") } ?: Attempt.Ok("$model|$key")
         }, { })
+    }
+
+    @Test
+    fun onlyTheLastOptionWaitsLong() = runBlocking {
+        // A stuck model shouldn't hold up the others: every attempt but the last is a quick one
+        val patient = mutableListOf<Boolean>()
+        GeminiRouter.route(listOf("k1"), models, { model, _, p ->
+            patient += p
+            if (model == "flash-lite") Attempt.Ok("ok") else Attempt.Fail(Failure.OVERLOADED, "slow")
+        }, { })
+        assertEquals(listOf(false, false, true), patient)
     }
 
     @Test

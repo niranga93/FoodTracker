@@ -52,9 +52,9 @@ private fun BurnSplitCard(day: DayEnergy?, dayOffset: Int, hasDeviceData: Boolea
             Text("Calculating…", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            val resting = day.resting.coerceAtMost(day.burned)
-            val activity = (day.burned - resting).coerceAtLeast(0.0)
-            Text("${day.burned.f0()} kcal", fontSize = 40.sp, fontWeight = FontWeight.ExtraBold,
+            val activity = day.activityKcal
+            val resting = day.burned - activity
+            Text("${java.text.NumberFormat.getIntegerInstance().format(Math.round(day.burned))} kcal", fontSize = 40.sp, fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.secondary)
             Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth().height(16.dp).clip(RoundedCornerShape(8.dp))) {
@@ -65,8 +65,8 @@ private fun BurnSplitCard(day: DayEnergy?, dayOffset: Int, hasDeviceData: Boolea
                         .background(MaterialTheme.colorScheme.secondary))
                 }
             }
-            SplitRow(MaterialTheme.colorScheme.secondaryContainer, "Resting", "${resting.f0()} kcal")
-            SplitRow(MaterialTheme.colorScheme.secondary, "Activity", "${activity.f0()} kcal")
+            SplitRow(MaterialTheme.colorScheme.secondaryContainer, "Resting", "${java.text.NumberFormat.getIntegerInstance().format(Math.round(resting))} kcal")
+            SplitRow(MaterialTheme.colorScheme.secondary, "Activity", "${java.text.NumberFormat.getIntegerInstance().format(Math.round(activity))} kcal")
             if (!hasDeviceData) {
                 Text(
                     "Connect Health Connect for real data.",
@@ -98,7 +98,7 @@ fun BurnedScreen(db: MealDb, dayOffset: Int, onDayChange: (Int) -> Unit, inner: 
             week = offs.map { off ->
                 val kcal = withContext(Dispatchers.IO) { loadDay(db, off).flatMap { it.items }.totals().kcal }
                 val raw = EnergyRepo.build(body, off, kcal, acts[off])
-                raw.copy(burned = raw.burned * factor, resting = raw.resting * factor)
+                raw.copy(burned = raw.burned * factor, resting = raw.resting * factor, shownActivity = raw.shownActivity?.times(factor))
             }
         }
     }

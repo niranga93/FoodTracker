@@ -27,9 +27,14 @@ object DailyTip {
 
     private data class Candidate(val id: String, val score: Double, val title: String, val body: String)
 
-    fun pick(days: List<TipDay>, g: Goals, waterGoalMl: Int, dayOfYear: Int, lastId: String? = null): Text {
+    /**
+     * [body]: tips from the body model and weigh-ins ([BodyTips]); they compete with the food tips on the same
+     * scale, so a large logging gap outranks a small fibre shortfall.
+     */
+    fun pick(days: List<TipDay>, g: Goals, waterGoalMl: Int, dayOfYear: Int, lastId: String? = null, body: List<BodyTips.Tip> = emptyList()): Text {
         val logged = days.filter { it.totals.kcal >= NutritionNudges.LOGGED_KCAL }
-        val candidates = if (logged.size < 3) emptyList() else candidates(logged, g, waterGoalMl)
+        val bodyCandidates = body.map { Candidate(it.id, it.score, it.title, it.body) }
+        val candidates = ((if (logged.size < 3) emptyList() else candidates(logged, g, waterGoalMl)) + bodyCandidates)
             .sortedByDescending { it.score }.take(3)
         val pool = candidates.ifEmpty { if (logged.size < 3) listOf(logMore(logged.size)) else evergreen() }
             .filter { it.id != lastId }.ifEmpty { candidates.ifEmpty { evergreen() } }

@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -140,19 +144,34 @@ fun WeightCard() {
             } else {
                 val window = entries.takeLast(30)
                 val latest = entries.last()
-                val allTrend = EnergyModel.trend(entries.map { it.kg })
+                // The trend uses morning weights: an evening weigh-in carries the day's food and drink
+                val mornings = com.example.nourio.energy.BodyData.morningWeights(entries)
+                val allTrend = EnergyModel.trend(mornings)
                 val windowTrend = allTrend.takeLast(window.size)
                 Text("${latest.kg.f1()} kg", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text(
-                    "Trend ${allTrend.last().f1()} kg" +
+                    "Morning trend ${allTrend.last().f1()} kg" +
                         if (window.size > 1)
-                            "  ·  ${signedKg(latest.kg - window.first().kg)} kg since ${shortDate(window.first().ts)}"
+                            "  ·  ${signedKg(allTrend.last() - windowTrend.first())} kg since ${shortDate(window.first().ts)}"
                         else "",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(8.dp))
                 WeightChart(window, windowTrend)
+                // The dots are the weights as weighed; the line is the morning trend, so it sits below evening weigh-ins
+                Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.foundation.layout.Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(MaterialTheme.colorScheme.secondary))
+                    Spacer(Modifier.width(6.dp))
+                    Text("As weighed", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(16.dp))
+                    androidx.compose.foundation.layout.Box(Modifier.size(width = 16.dp, height = 3.dp)
+                        .background(MaterialTheme.colorScheme.primary))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Morning trend", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Spacer(Modifier.height(8.dp))
                 Text(
                     "Recent weigh-ins",

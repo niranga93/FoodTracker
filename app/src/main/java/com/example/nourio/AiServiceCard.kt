@@ -111,9 +111,11 @@ private fun ProviderKeyCard(p: Provider) {
             runCatching { withContext(Dispatchers.IO) { Llm.listModels(p, key) } }.fold(
                 onSuccess = { list ->
                     if (saveIt) { AiSettings.setKey(context, p, key); saved = key; input = "" }
-                    models = (p.suggested + list).distinct()
+                    com.example.nourio.ai.ModelCaps.remember(context, p, list)
+                    models = (p.suggested + list.map { it.id }).distinct()
                     if (model.isBlank()) models.firstOrNull()?.let { model = it; AiSettings.setModel(context, p, it) }
-                    message = "Key works. ${list.size} models available."
+                    val photoCount = list.count { it.images == true }
+                    message = "Key works. ${list.size} chat models, $photoCount of them read photos."
                 },
                 onFailure = { message = it.message ?: "Couldn't reach ${p.label}." }
             )
@@ -153,7 +155,15 @@ private fun ProviderKeyCard(p: Provider) {
                     if (models.isEmpty()) DropdownMenuItem(text = { Text("Tap Load models first") }, onClick = { menu = false })
                     models.forEach { m ->
                         DropdownMenuItem(
-                            text = { Text(m, fontWeight = if (m == model) FontWeight.Bold else FontWeight.Normal) },
+                            text = {
+                                Column {
+                                    Text(m, fontWeight = if (m == model) FontWeight.Bold else FontWeight.Normal)
+                                    Text(
+                                        com.example.nourio.ai.ModelCaps.label(p, m), style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            },
                             onClick = { model = m; AiSettings.setModel(context, p, m); menu = false }
                         )
                     }
@@ -175,9 +185,16 @@ private fun ProviderKeyCard(p: Provider) {
                     )
                 }
             }
+            val photoModel = com.example.nourio.ai.ModelCaps.photoModel(p, model.ifBlank { null })
             Text(
-                if (p.photos) "Meal photos need a model that accepts images. If a photo fails, pick a vision model."
-                else "${p.label} reads text only: describe meals in words. Meal photos are turned off.",
+                when {
+                    !p.photos -> "${p.label} reads text only: describe meals in words. Meal photos are turned off."
+                    model.isBlank() -> "Choose a model. Ones marked \"Photos and text\" can analyze meal photos."
+                    photoModel == model -> "$model: photos and text."
+                    photoModel != null -> "$model reads text only. Meal photos go to $photoModel instead."
+                    else -> "$model reads text only, and none of your models are known to read photos. " +
+                        "Tap Load models, or describe meals in words."
+                },
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }

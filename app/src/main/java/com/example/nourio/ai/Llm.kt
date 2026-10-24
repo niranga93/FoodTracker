@@ -41,20 +41,54 @@ data class LlmTurn(val role: String, val text: String, val imageJpegBase64: Stri
 object Llm {
     private val http = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(90, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .callTimeout(90, TimeUnit.SECONDS)
         .build()
 
     suspend fun complete(req: LlmRequest): String {
         val provider = AiSettings.provider
-        if (req.turns.any { it.imageJpegBase64 != null } && !provider.photos) {
+        val photo = req.turns.any { it.imageJpegBase64 != null }
+        if (photo && !provider.photos) {
             error("${provider.label} can't read photos. Describe the meal in words, or choose another AI service in Profile > Connections.")
         }
-        val out = when {
-            provider == Provider.GEMINI -> gemini(req)
-            provider == Provider.CLAUDE -> claude(req)
-            else -> openAiCompatible(provider, req)
+        if (provider == Provider.GEMINI) return finish(req, gemini(req))   // the router picks models itself
+
+        val chosen = AiSettings.model(provider) ?: error("Choose a ${provider.label} model in Profile > Connections.")
+        // A photo goes only to a model that reads images; if a model turns out not to, remember it and try the next
+        repeat(3) {
+            val model = if (photo) photoModelOrThrow(provider, chosen) else chosen
+            if (photo && model != chosen) AiProgress.event("$chosen reads text only, so the photo goes to $model")
+            if (!photo && !ModelCaps.isChat(model)) error("$model can't answer chat requests. Choose another model in Profile > Connections.")
+            val key = AiSettings.key(provider) ?: error("No ${provider.label} key yet. Add yours in Profile > Connections.")
+            AiProgress.trying(model, "…${key.takeLast(4)}")
+            try {
+                val out = if (provider == Provider.CLAUDE) claude(req, key, model) else openAiCompatible(provider, req, key, model)
+                return finish(req, out)
+            } catch (e: ImageRejected) {
+                ModelCaps.markTextOnly(provider, model)
+                AiProgress.event("$model doesn't read photos, trying another model")
+            }
         }
-        return if (req.webSearch && req.schema != null) extractJson(out) else out
+        error("None of your ${provider.label} models could read the photo. Pick one marked \"Photos and text\" in Profile > Connections.")
+    }
+
+    private fun finish(req: LlmRequest, out: String) = if (req.webSearch && req.schema != null) extractJson(out) else out
+
+    private fun photoModelOrThrow(p: Provider, chosen: String): String =
+        ModelCaps.photoModel(p, chosen) ?: error(
+            "$chosen can't read photos, and none of your ${p.label} models are known to. " +
+                "Tap Load models in Profile > Connections and pick one marked \"Photos and text\", or describe the meal in words."
+        )
+
+    /** The model said it can't take images. */
+    private class ImageRejected(message: String) : Exception(message)
+
+    /** A 400 or 404 that is about the image itself, not the rest of the request. */
+    internal fun isImageRejection(code: Int, body: String): Boolean {
+        if (code != 400 && code != 404 && code != 422) return false
+        val b = body.lowercase()
+        return listOf("image", "vision", "multimodal", "modalit", "image_url").any { it in b } &&
+            listOf("support", "not ", "invalid", "unsupported", "cannot", "can't", "does not").any { it in b }
     }
 
     // ------------------------------------------------------------ Gemini (unchanged routing)
@@ -123,9 +157,7 @@ object Llm {
     // The two current models where the server-side refusal fallback is on by default
     private val FALLBACK_MODELS = setOf("claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1")
 
-    private fun claude(req: LlmRequest): String {
-        val key = AiSettings.key(Provider.CLAUDE) ?: error("No Claude key yet. Add yours in Profile > Connections.")
-        val model = AiSettings.model(Provider.CLAUDE) ?: "claude-opus-5-5"
+    private suspend fun claude(req: LlmRequest, key: String, model: String): String {
         val b = MessageCreateParams.builder().model(model).maxTokens(16000L)
         req.system?.let { b.system(it) }
         req.turns.forEach { t ->
@@ -162,7 +194,10 @@ object Llm {
             b.addBeta("server-side-fallback-2026-07-01")
             b.putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
         }
-        val msg = claudeClient(key).beta().messages().create(b.build())
+        // Interruptible, so Cancel on screen stops the request (the async client would add ~28 MB to the app)
+        val msg = kotlinx.coroutines.runInterruptible(kotlinx.coroutines.Dispatchers.IO) {
+            claudeClient(key).beta().messages().create(b.build())
+        }
         if (msg.stopReason().map { it.toString() }.orElse("") == "refusal") {
             error("Claude declined this request. Try rewording it.")
         }
@@ -204,16 +239,16 @@ object Llm {
         return if (start >= 0 && end > start) text.substring(start, end + 1) else text
     }
 
-    private fun openAiCompatible(p: Provider, req: LlmRequest): String {
-        val key = AiSettings.key(p) ?: error("No ${p.label} key yet. Add yours in Profile > Connections.")
-        val model = AiSettings.model(p) ?: error("Choose a ${p.label} model in Profile > Connections.")
+    private suspend fun openAiCompatible(p: Provider, req: LlmRequest, key: String, model: String): String {
+        val photo = req.turns.any { it.imageJpegBase64 != null }
         val request = Request.Builder().url("${p.baseUrl}/chat/completions")
             .header("Authorization", "Bearer $key")
             .post(openAiBody(model, req).toString().toRequestBody("application/json".toMediaType()))
             .build()
         val body = try {
-            http.newCall(request).execute().use { r ->
+            http.newCall(request).await().use { r ->
                 val text = r.body.string()
+                if (!r.isSuccessful && photo && isImageRejection(r.code, text)) throw ImageRejected(text.take(200))
                 if (!r.isSuccessful) {
                     val msg = runCatching { JSONObject(text).getJSONObject("error").optString("message") }.getOrNull()
                     error(when (r.code) {
@@ -224,6 +259,8 @@ object Llm {
                 }
                 text
             }
+        } catch (e: java.io.InterruptedIOException) {
+            throw IOException("${p.label} took too long to answer ($model). Try again, or pick a faster model in Profile > Connections.", e)
         } catch (e: IOException) {
             throw IOException("No connection to ${p.label}. Check your internet and try again.", e)
         }
@@ -232,16 +269,17 @@ object Llm {
     }
 
     /** The models a key can use, for the model picker. Throws with a readable message on a bad key. */
-    fun listModels(p: Provider, key: String): List<String> {
+    fun listModels(p: Provider, key: String): List<ModelInfo> {
         if (p == Provider.CLAUDE) {
             return AnthropicOkHttpClient.builder().apiKey(key).build().models().list().autoPager().map { it.id() }.toList()
+                .filter { ModelCaps.isChat(it) }.map { ModelInfo(it, ModelCaps.imagesByName(p, it)) }
         }
         val request = Request.Builder().url("${p.baseUrl}/models").header("Authorization", "Bearer $key").build()
         return http.newCall(request).execute().use { r ->
             if (r.code == 401 || r.code == 403) error("That key wasn't accepted by ${p.label}.")
             if (!r.isSuccessful) error("${p.label} error ${r.code}")
             val data = JSONObject(r.body.string()).optJSONArray("data") ?: JSONArray()
-            (0 until data.length()).map { data.getJSONObject(it).optString("id") }.filter { it.isNotBlank() }.sorted()
+            (0 until data.length()).mapNotNull { ModelCaps.fromListing(p, data.getJSONObject(it)) }.sortedBy { it.id }
         }
     }
 }

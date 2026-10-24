@@ -34,10 +34,16 @@ fun DietCard() {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // "None" and the specific diets exclude each other
+                FilterChip(
+                    selected = s.noDiet,
+                    onClick = { update(if (s.noDiet) s.copy(noDiet = false) else s.copy(noDiet = true, diets = emptySet())) },
+                    label = { Text("No dietary requirements") }
+                )
                 DIETS.forEach { d ->
                     FilterChip(
                         selected = d in s.diets,
-                        onClick = { update(s.copy(diets = if (d in s.diets) s.diets - d else s.diets + d)) },
+                        onClick = { update(s.copy(diets = if (d in s.diets) s.diets - d else s.diets + d, noDiet = false)) },
                         label = { Text(d) }
                     )
                 }
@@ -47,11 +53,18 @@ fun DietCard() {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                FilterChip(
+                    selected = s.noAllergies,
+                    onClick = {
+                        update(if (s.noAllergies) s.copy(noAllergies = false) else s.copy(noAllergies = true, allergens = emptySet()))
+                    },
+                    label = { Text("No allergies") }
+                )
                 ALLERGENS.forEach { (key, label) ->
                     FilterChip(
                         selected = key in s.allergens,
                         onClick = {
-                            update(s.copy(allergens = if (key in s.allergens) s.allergens - key else s.allergens + key))
+                            update(s.copy(allergens = if (key in s.allergens) s.allergens - key else s.allergens + key, noAllergies = false))
                         },
                         label = { Text(label) }
                     )

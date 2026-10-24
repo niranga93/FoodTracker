@@ -26,8 +26,8 @@ android {
         applicationId = "com.nnrzone.nourio"
         minSdk = 26
         targetSdk = 37
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField(
@@ -76,6 +76,14 @@ android {
             optimization {
                 enable = true
             }
+        }
+        // The release build as a separate app ("Nourio Test"), to try on a phone next to the Play version
+        create("staging") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".test"
+            versionNameSuffix = "-test"
+            matchingFallbacks += "release"
+            isDebuggable = true      // test copy only: lets adb read its data to check the models against real logs
         }
     }
     // The Anthropic SDK's Apache HTTP libraries each carry the same licence metadata files

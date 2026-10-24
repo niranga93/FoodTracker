@@ -25,17 +25,20 @@ object MealPhotos {
     /** Saves a thumbnail of [photo] for the meal in the background, then deletes the full photo. */
     fun saveAsync(context: Context, mealId: Long, photo: File) {
         val app = context.applicationContext
-        scope.launch {
-            runCatching {
-                val bmp = ImageUtil.loadUpright(photo, SIZE) ?: return@runCatching
-                val scale = SIZE.toFloat() / max(bmp.width, bmp.height)
-                val small = if (scale < 1f)
-                    bmp.scale((bmp.width * scale).toInt(), (bmp.height * scale).toInt())
-                else bmp
-                fileFor(app, mealId).outputStream().use { small.compress(Bitmap.CompressFormat.JPEG, 80, it) }
-            }
-            photo.delete()
+        scope.launch { save(app, mealId, photo) }
+    }
+
+    /** Blocking version of [saveAsync], for background work that must finish before it returns. */
+    fun save(context: Context, mealId: Long, photo: File) {
+        runCatching {
+            val bmp = ImageUtil.loadUpright(photo, SIZE) ?: return@runCatching
+            val scale = SIZE.toFloat() / max(bmp.width, bmp.height)
+            val small = if (scale < 1f)
+                bmp.scale((bmp.width * scale).toInt(), (bmp.height * scale).toInt())
+            else bmp
+            fileFor(context, mealId).outputStream().use { small.compress(Bitmap.CompressFormat.JPEG, 80, it) }
         }
+        photo.delete()
     }
 
     /** Blocking: call from Dispatchers.IO. */

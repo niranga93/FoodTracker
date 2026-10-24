@@ -29,8 +29,12 @@ object OpenFoodFacts {
         "ingredients_analysis_tags,ingredients_text,additives_tags,nova_group,nutriscore_grade"
 
     private val pinner = CertificatePinner.Builder()
-        .add("world.openfoodfacts.org", "sha256/Y9m3pBnn822fN8k+e4lM07Jm08e063k3N/218r24k08=")
-        .add("search.openfoodfacts.org", "sha256/Y9m3pBnn822fN8k+e4lM07Jm08e063k3N/218r24k08=")
+        .apply {
+            LetsEncryptPins.ROOTS.forEach {
+                add("world.openfoodfacts.org", it)
+                add("search.openfoodfacts.org", it)
+            }
+        }
         .build()
 
     private val client = OkHttpClient.Builder()
@@ -132,7 +136,12 @@ object OpenFoodFacts {
             ?: 0.0
 
         val code = p.optString("code").ifBlank { codeFallback }
-        val brand = p.optString("brands").substringBefore(",").trim()
+        // The product API sends brands as "A, B"; the newer search service sends a list ["A", "B"]
+        val brand = when (val b = p.opt("brands")) {
+            is org.json.JSONArray -> if (b.length() > 0) b.optString(0) else ""
+            null -> ""
+            else -> b.toString()
+        }.substringBefore(",").trim()
         val name = listOf(brand, p.optString("product_name")).filter { it.isNotBlank() }
             .joinToString(" ").ifBlank { if (code.isBlank()) return null else "Product $code" }
         val serving = p.optDouble("serving_quantity", 0.0).takeIf { it > 0 } ?: 100.0

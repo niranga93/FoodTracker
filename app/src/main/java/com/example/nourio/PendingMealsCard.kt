@@ -42,7 +42,7 @@ fun PendingMealsCard(onOpen: (Long) -> Unit) {
     AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(vertical = 12.dp)) {
             Text(
-                "Photos to review",
+                "Meals in progress",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 16.dp)
@@ -58,9 +58,14 @@ fun PendingMealsCard(onOpen: (Long) -> Unit) {
                             "${p.label.replaceFirstChar { it.uppercase() }} · ${timeFmt.format(Date(p.mealTs))}",
                             style = MaterialTheme.typography.bodyLarge
                         )
+                        p.text?.let {
+                            Text("“$it”", style = MaterialTheme.typography.bodySmall, maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        }
                         Text(
                             when (p.status) {
-                                PendingStatus.WAITING -> "Waiting for a connection to analyze"
+                                PendingStatus.WAITING -> if (p.autoSave) "Analyzing in the background. It'll be added to your log."
+                                    else "Waiting for a connection to analyze"
                                 PendingStatus.READY -> "Ready to review: ${p.analysis?.description.orEmpty()}"
                                 PendingStatus.FAILED -> "Couldn't analyze. Tap to try again."
                             },
@@ -85,13 +90,17 @@ fun PendingMealsCard(onOpen: (Long) -> Unit) {
 @Composable
 private fun PhotoThumb(p: PendingMeal) {
     val bmp by produceState<Bitmap?>(null, p.id) {
-        value = withContext(Dispatchers.IO) { ImageUtil.loadUpright(p.photo, 160) }
+        value = p.photo?.let { withContext(Dispatchers.IO) { ImageUtil.loadUpright(it, 160) } }
     }
     Box(
         Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        bmp?.let {
-            Image(it.asImageBitmap(), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        val b = bmp
+        if (b != null) {
+            Image(b.asImageBitmap(), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        } else if (p.photo == null) {
+            // A typed or spoken meal has no photo
+            Text("✎", Modifier.align(Alignment.Center), style = MaterialTheme.typography.titleMedium)
         }
     }
 }

@@ -34,7 +34,8 @@ enum class Metric(val label: String, val unit: String, val better: Int) {
     SYSTOLIC("Blood pressure (systolic)", "mmHg", -1),
     DIASTOLIC("Blood pressure (diastolic)", "mmHg", -1),
     WEIGHT("Weight", "kg", 0),
-    WEIGHT_CHANGE("Weight change to the next day", "kg", 0);
+    WEIGHT_CHANGE("Weight change to the next day", "kg", 0),
+    CARBS("Carbohydrate", "g", 0);
 
     fun format(v: Double): String = when (this) {
         LAST_MEAL, BEDTIME, WAKE_TIME -> clock(v % 24)
@@ -48,7 +49,7 @@ enum class Metric(val label: String, val unit: String, val better: Int) {
 
     companion object {
         /** Intake metrics only mean something on days with a full food log. */
-        val INTAKE = setOf(KCAL, PROTEIN, FIBER, SUGAR, SAT_FAT, SODIUM, LAST_MEAL, FAST, EATING_WINDOW)
+        val INTAKE = setOf(KCAL, PROTEIN, FIBER, SUGAR, SAT_FAT, SODIUM, CARBS, LAST_MEAL, FAST, EATING_WINDOW)
 
         /** Measured once a night rather than once a day. */
         val NIGHTLY = setOf(SLEEP, BEDTIME, WAKE_TIME, AWAKE, SLEEP_EFFICIENCY, DEEP_SLEEP, REM_SLEEP, BEDTIME_SHIFT)
@@ -221,6 +222,13 @@ object InsightEngine {
         Hypothesis("sodium-weight",Metric.SODIUM, Metric.WEIGHT_CHANGE, false, +1,
             { _, _, yLow, yHigh, split -> "After days over ${n0(split)} mg of sodium your weight was up about ${"%.1f".format(yHigh - yLow)} kg the next morning (mostly water)." },
             { g, _ -> sodiumTip("sodium-weight", g, "Salty days show up on your scale the next morning as water weight.") }),
+        // Each gram of stored carbohydrate holds ~2.7 g of water (Hall 2011): high-carb days fill glycogen and the
+        // scale, low-carb days empty it. Shown so a jump after pasta night isn't mistaken for fat.
+        Hypothesis("carbs-weight", Metric.CARBS, Metric.WEIGHT_CHANGE, false, +1,
+            { _, _, yLow, yHigh, split -> "After days over ${n0(split)} g of carbohydrate your weight was up about ${"%.1f".format(yHigh - yLow)} kg the next morning. That's water stored with carbohydrate (about 3 g per g), not fat." },
+            { _, _ -> Tip("carbs-weight", "Carb days show on the scale as water",
+                "Your weight rises the morning after high-carb days and falls after lighter ones. Stored carbohydrate holds about " +
+                    "3 g of water per gram, so this is water, not fat. Judge progress by your weekly trend, not a single morning.", null) }),
         Hypothesis("sodium-bp", Metric.SODIUM, Metric.SYSTOLIC, true, +1,
             { _, _, yLow, yHigh, split -> "After days over ${n0(split)} mg of sodium your blood pressure was about ${n0(yHigh - yLow)} mmHg higher the next day." },
             { g, _ -> sodiumTip("sodium-bp", g, "Your blood pressure rises after salty days.") }),
@@ -237,8 +245,9 @@ object InsightEngine {
             { _, _, yLow, yHigh, split -> "After days with more than ${n0(split)} g of protein you ate about ${n0(yLow - yHigh)} kcal less the next day." },
             { g, _ -> if (g.protein <= 0) null else Tip("protein-kcal", "Raise your protein goal",
                 "Protein-rich days keep you fuller the next day.", GoalChange(GoalField.PROTEIN, g.protein, roundTo(g.protein * 1.1, 5.0))) }),
+        // One big day is mostly food still in the gut plus glycogen water: a 500 kcal surplus is ~0.07 kg of tissue
         Hypothesis("kcal-weight", Metric.KCAL, Metric.WEIGHT_CHANGE, false, +1,
-            { _, _, yLow, yHigh, split -> "After days over ${n0(split)} kcal your weight was about ${"%.1f".format(yHigh - yLow)} kg higher the next morning." },
+            { _, _, yLow, yHigh, split -> "After days over ${n0(split)} kcal your weight was about ${"%.1f".format(yHigh - yLow)} kg higher the next morning. Most of that is food not yet digested and water; a single big day adds well under 0.1 kg of fat." },
             { _, _ -> null }),
 
         // Fasting. Either direction is reported: some people eat less after a long fast, others make up for it.
@@ -251,12 +260,12 @@ object InsightEngine {
             { g, split, yLow, yHigh -> fastKcalTip(g, split, yHigh < yLow) }),
         Hypothesis("fast-weight", Metric.FAST, Metric.WEIGHT_CHANGE, false, 0,
             { _, _, yLow, yHigh, split ->
-                if (yHigh < yLow) "After an overnight fast of ${h1(split)} or more, your weight the next morning was about ${kg(yLow - yHigh)} lower than after shorter fasts."
+                if (yHigh < yLow) "After an overnight fast of ${h1(split)} or more, your weight the next morning was about ${kg(yLow - yHigh)} lower than after shorter fasts. That's mostly less food in the gut and less stored-carbohydrate water, not fat; fat loss follows your calories over the week."
                 else "After an overnight fast of ${h1(split)} or more, your weight the next morning was about ${kg(yHigh - yLow)} higher than after shorter fasts."
             },
             { _, _ -> null },
-            { g, split, yLow, yHigh -> if (yHigh < yLow) fastGoalTip("fast-weight", g, split,
-                "Your longer fasts go with lower weight the next morning.") else null }),
+            // No tip: a lighter morning after a long fast is gut contents and water, so it isn't a reason to fast longer
+            { _, _, _, _ -> null }),
         Hypothesis("window-kcal", Metric.EATING_WINDOW, Metric.KCAL, false, 0,
             { _, _, yLow, yHigh, split ->
                 if (yHigh > yLow) "On days you ate over more than ${h1(split)} you ate about ${n0(yHigh - yLow)} kcal more."
@@ -611,10 +620,11 @@ object InsightEngine {
             "You met your water goal on ${water.count { it >= g.waterMl }} of the last ${water.size} days. Keep it up, or raise it a little.",
             GoalChange(GoalField.WATER, g.waterMl, g.waterMl + 250)
         )
-        val sleep = week.mapNotNull { it[Metric.SLEEP] }
+        // Last night's sleep is already over, so sleep uses the last 7 nights including it (as the Sleep page does)
+        val sleep = days.filter { it.date > today.minusDays(7) }.mapNotNull { it[Metric.SLEEP] }
         if (sleep.size >= 4 && sleep.average() < 6.5) out += Tip(
             "sleep-short", "Protect your sleep",
-            "You averaged ${"%.1f".format(sleep.average())} h of sleep this week. Under 7 h makes cravings and overeating more likely.",
+            "You averaged ${hoursMinutes(sleep.average())} of sleep over your last ${sleep.size} nights. Under 7 h makes cravings and overeating more likely.",
             if (g.sleepH < 7.0) GoalChange(GoalField.SLEEP, g.sleepH, 7.0) else null
         )
         val shifts = week.mapNotNull { it[Metric.BEDTIME_SHIFT] }
@@ -679,4 +689,10 @@ object InsightEngine {
         val coverage = Metric.entries.associateWith { m -> days.count { it[m] != null } }
         return Analysis(days.size, coverage, rels.map { it.first }, trends, tips)
     }
+}
+
+/** 4.6 -> "4 h 36 m", the way sleep is shown elsewhere in the app. */
+internal fun hoursMinutes(hours: Double): String {
+    val total = Math.round(hours * 60)
+    return "${total / 60} h ${total % 60} m"
 }
